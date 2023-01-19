@@ -53,7 +53,7 @@ async fn main() {
 
     // GET / -> index html
     let index = warp::path::end()
-    .map(|| warp::reply::html(INDEX_HTML));
+    .map(|| warp::reply::html(""));
 
     let list_route = warp::path("list")
         .and(warp::path::end())
@@ -135,7 +135,7 @@ async fn user_connected(ws: WebSocket, users: Users, users_list: UsersList) {
 
     // user_ws_rx stream will keep processing as long as the user stays
     // connected. Once they disconnect, then...
-    user_disconnected(user_id, &users).await;
+    user_disconnected(user_id, &users, &users_list).await;
 }
 
 async fn user_message(my_id: Uuid, msg: Message, users: &Users) {
@@ -146,11 +146,31 @@ async fn user_message(my_id: Uuid, msg: Message, users: &Users) {
         return;
     };
 
-    let new_msg = format!("<User#{}>: {}", my_id, msg);
+    if !msg.starts_with("to:") {
+        return;
+    }
+
+    let mut parts: Vec<&str> = msg.split(":").collect();
+    let parts_c = parts.clone();
+    let send_to = parts_c.get(1);
+    if send_to.is_none() {
+        println!("Invalid format");
+        return;
+    }
+
+    println!("{:#?}", parts);
+    let send_to = send_to.unwrap();
+    parts.remove(0);
+    parts.remove(0);
+
+    let left = parts.join(":");
+
+    let new_msg = format!("from:{}:{}", my_id, left);
 
     // New message from this user, send it to everyone else (except same uid)...
     for (&uid, tx) in users.read().await.iter() {
-        if my_id != uid {
+        if send_to.to_string().eq(&uid.to_string()) {
+            println!("Sending {} to {}", new_msg, uid);
             if let Err(_disconnected) = tx.send(Message::text(new_msg.clone())) {
                 // The tx is disconnected, our `user_disconnected` code
                 // should be happening in another task, nothing more to
@@ -160,57 +180,20 @@ async fn user_message(my_id: Uuid, msg: Message, users: &Users) {
     }
 }
 
-async fn user_disconnected(my_id: Uuid, users: &Users) {
+async fn user_disconnected(my_id: Uuid, users: &Users, users_list: &UsersList) {
     eprintln!("good bye user: {}", my_id);
 
     // Stream closed up, so remove from the user list
     users.write().await.remove(&my_id);
-}
-
-static INDEX_HTML: &str = r#"<!DOCTYPE html>
-<html lang="en">
-    <head>
-        <title>Warp Chat</title>
-    </head>
-    <body>
-        <h1>Warp chat</h1>
-        <div id="chat">
-            <p><em>Connecting...</em></p>
-        </div>
-        <input type="text" id="text" />
-        <button type="button" id="send">Send</button>
-        <script type="text/javascript">
-        const chat = document.getElementById('chat');
-        const text = document.getElementById('text');
-        const uri = 'ws://' + location.host + '/chat';
-        const ws = new WebSocket(uri);
-
-        function message(data) {
-            const line = document.createElement('p');
-            line.innerText = data;
-            chat.appendChild(line);
+    let mut e = users_list.lock().await;
+    let mut i = 0;
+    for el in e.clone().iter() {
+        if el.eq(&my_id) {
+            e.remove(i);
+            break;
         }
+        i += 1;
+    }
 
-        ws.onopen = function() {
-            chat.innerHTML = '<p><em>Connected!</em></p>';
-        };
-
-        ws.onmessage = function(msg) {
-            message(msg.data);
-        };
-
-        ws.onclose = function() {
-            chat.getElementsByTagName('em')[0].innerText = 'Disconnected!';
-        };
-
-        send.onclick = function() {
-            const msg = text.value;
-            ws.send(msg);
-            text.value = '';
-
-            message('<You>: ' + msg);
-        };
-        </script>
-    </body>
-</html>
-"#;
+    drop(e);
+}

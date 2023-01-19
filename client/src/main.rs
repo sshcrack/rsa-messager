@@ -1,8 +1,8 @@
-use std::{process::exit, sync::{Arc, RwLock}, os::windows::process, io::stdin};
+use std::{process::exit, sync::{Arc, RwLock}};
 
 use futures_util::{SinkExt, StreamExt, stream::{SplitStream, SplitSink}};
 use inquire::{Select, Text};
-use tokio::{task, net::TcpStream, io::stdin};
+use tokio::{task, net::TcpStream};
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream, tungstenite::Message};
 
 type UserId = Arc<RwLock<Option<String>>>;
@@ -24,7 +24,6 @@ async fn _async_main() -> anyhow::Result<()> {
 
     let (ws_stream, _) = connect_async(format!("ws://{}/chat", base_url)).await?;
     let curr_id = UserId::default();
-    let curr_id_second = curr_id.clone();
 
 
     let client = reqwest::Client::new();
@@ -49,27 +48,70 @@ async fn _async_main() -> anyhow::Result<()> {
         .prompt()?;
 
     let (tx, rx) = ws_stream.split();
-    let receive_thread = tokio::spawn(_receive_msgs(rx, curr_id, receiver.clone()));
-    let send_thread = tokio::spawn(_send_msgs(tx, curr_id_second, receiver.clone()));
+    let stdin = std::io::stdin();
 
-    // Block rust from exiting
-    while !receive_thread.is_finished() || !send_thread.is_finished() { }
+    let receive = tokio::spawn(async move {
+        let res = _receive_msgs(rx, curr_id).await;
+        if res.is_err() {
+            eprintln!("{}", res.unwrap_err());
+            return Ok(());
+        }
+
+        return Ok(());
+    });
+    let send_f = tokio::spawn(async move {
+        _send_msgs(tx, receiver.clone(), stdin).await
+    });
+
+
+    println!("Send await");
+    task::yield_now().await;
+    let rec_res = receive.await;
+
+    if rec_res.is_err() {
+        eprintln!("Join err");
+        return Ok(());
+    }
+    let rec_res = rec_res.unwrap();
+
+    if rec_res.is_err() {
+        return Err(rec_res.unwrap_err());
+    }
+
+    let send_res = send_f.await;
+
+
+    if send_res.is_err() {
+        eprintln!("Join err");
+        return Ok(());
+    }
+
+    let send_res = send_res.unwrap();
+
+    if send_res.is_err() {
+        return Err(send_res.unwrap_err());
+    }
+
+
+
+    println!("Done");
     Ok(())
 }
 
 
-async fn _receive_msgs(mut rx: SplitStream<WebSocketGeneral>, curr_id: UserId, receiver: String) -> anyhow::Result<()> {
+async fn _receive_msgs(mut rx: SplitStream<WebSocketGeneral>, curr_id: UserId) -> anyhow::Result<()> {
     while let Some(msg) = rx.next().await {
         let msg = msg?;
         if !msg.is_text() {
             continue;
         }
 
-        println!("Incoming: {}",msg);
         let msg_txt = msg.to_text().unwrap().to_string();
         if msg_txt.starts_with("UID:") {
             let mut state = curr_id.write().unwrap();
             *state = Some(msg_txt.replace("UID:", "").to_string());
+
+            drop(state);
 
             println!("Current id set to {:#?}", curr_id.read().unwrap());
             continue;
@@ -77,7 +119,7 @@ async fn _receive_msgs(mut rx: SplitStream<WebSocketGeneral>, curr_id: UserId, r
 
         if msg_txt.starts_with("from:") {
             let msg_txt = msg_txt.replace("from:", "");
-            let mut parts: Vec<&str> = msg_txt.rsplit("$").collect();
+            let mut parts: Vec<&str> = msg_txt.split(":").collect();
             let parts_clone = parts.clone();
 
             let from_id = parts_clone.get(0);
@@ -90,7 +132,7 @@ async fn _receive_msgs(mut rx: SplitStream<WebSocketGeneral>, curr_id: UserId, r
             parts.remove(0);
 
             let msg = parts.join("$");
-            println!("Received [{}]: {}", from_id, msg);
+            println!("[{}]: {}", from_id, msg);
         }
     }
 
@@ -99,14 +141,20 @@ async fn _receive_msgs(mut rx: SplitStream<WebSocketGeneral>, curr_id: UserId, r
 
 
 
-async fn _send_msgs(mut tx: SplitSink<WebSocketGeneral, Message>, _curr_id: UserId, _receiver: String) -> anyhow::Result<()> {
+async fn _send_msgs(mut tx: SplitSink<WebSocketGeneral, Message>, receiver: String, stdin: std::io::Stdin) -> anyhow::Result<()> {
+    println!("Msgs");
     loop {
         println!("Asking you for message:");
-        let line = std::io::stdin().lines().next().unwrap().unwrap();
-        println!("Line {}:", line)
-        /*let msg = Text::new("Message:").prompt()?;
-        println!("Sending message {}", msg);
+        print!("Message: ");
 
-        tx.send(Message::Text(msg)).await?;*/
+        let mut line = String::new();
+        stdin.read_line(&mut line).unwrap();
+
+        let line = line.replace("\n", "");
+        let line = line.replace("\r", "");
+
+        println!("Sending message {}", line);
+
+        tx.send(Message::Text(format!("to:{}:{}", receiver, line))).await?;
     }
 }
