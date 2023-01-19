@@ -1,160 +1,139 @@
-use std::{process::exit, sync::{Arc, RwLock}};
 
-use futures_util::{SinkExt, StreamExt, stream::{SplitStream, SplitSink}};
-use inquire::{Select, Text};
-use tokio::{task, net::TcpStream};
-use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream, tungstenite::Message};
+use std::{process::exit};
+use std::error::Error;
+use std::fmt;
 
-type UserId = Arc<RwLock<Option<String>>>;
-type WebSocketGeneral = WebSocketStream<MaybeTlsStream<TcpStream>>;
+use anyhow::anyhow;
+use futures_util::{StreamExt, lock::Mutex};
+use tokio::task;
+use tokio_tungstenite::connect_async;
+
+use crate::encryption::rsa::generate;
+use crate::msg::receive::receive_msgs;
+use crate::msg::send::send_msgs;
+use crate::msg::types::{UserId, Receiver};
+use crate::{input::receiver::select_receiver, consts::BASE_URL};
+
+mod encryption;
+mod input;
+mod consts;
+mod msg;
+
+
+
+#[derive(Debug)]
+struct ReqwestError {
+    orig: reqwest::Error
+}
+
+impl fmt::Display for ReqwestError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "SuperError is here!")
+    }
+}
+
+impl Error for ReqwestError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        Some(&self.orig)
+    }
+}
+
+
 
 #[tokio::main]
 async fn main() {
+    println!("Spawning main thread...");
     let res = task::spawn(_async_main()).await;
     if res.is_err() {
+        eprintln!("Main Run Error:");
         eprintln!("{:#?}", res.unwrap_err());
         exit(-1)
     }
 }
 
 async fn _async_main() -> anyhow::Result<()> {
-    let base_url = "localhost:3030";
-    let list_url = format!("http://{}/list", base_url);
+    println!("Generating keypair...");
+    let keypair_org = generate();
 
+    let ws_url = format!("ws://{}/chat", BASE_URL);
 
-    let (ws_stream, _) = connect_async(format!("ws://{}/chat", base_url)).await?;
+    println!("Connecting to {}...", ws_url.to_string());
+    let (ws_stream, _) = connect_async(ws_url.to_string()).await?;
     let curr_id = UserId::default();
 
 
-    let client = reqwest::Client::new();
-    let resp = client.get(list_url.to_string())
-        .send()
-        .await;
-
-
-    if resp.is_err() {
-        eprintln!("Could not fetch from {}", list_url);
-        eprintln!("");
-        return Ok(());
-    }
-
-    let resp = resp.unwrap();
-    let text = resp.text().await?;
-
-    let available: Vec<String> = serde_json::from_str(&text)?;
-    println!("Available clients are: {:#?}", available);
-
-    let receiver = Select::new("Receiver:", available)
-        .prompt()?;
+    let receiver_str = select_receiver(curr_id.clone()).await?;
+    let receiver = Receiver::new(Mutex::new(receiver_str));
 
     let (tx, rx) = ws_stream.split();
     let stdin = std::io::stdin();
 
+    let keypair = keypair_org.clone();
+    let temp = curr_id.clone();
     let receive = tokio::spawn(async move {
-        let res = _receive_msgs(rx, curr_id).await;
+        let res = receive_msgs(rx, temp, keypair).await;
         if res.is_err() {
-            eprintln!("{}", res.unwrap_err());
-            return Ok(());
+            let err = res.unwrap_err();
+            eprintln!("RecErr: {}", err);
+            return Err(err);
         }
 
         return Ok(());
     });
+
+    let keypair = keypair_org.clone();
+    let temp = curr_id.clone();
     let send_f = tokio::spawn(async move {
-        _send_msgs(tx, receiver.clone(), stdin).await
+        let res = send_msgs(tx, temp, receiver, stdin, keypair).await;
+        if res.is_err() {
+            let err = res.unwrap_err();
+            eprintln!("SendErr: {}", err);
+            return Err(err);
+        }
+
+        return Ok(());
     });
 
 
-    println!("Send await");
     task::yield_now().await;
-    let rec_res = receive.await;
+    while !receive.is_finished() && !send_f.is_finished() {}
 
-    if rec_res.is_err() {
-        eprintln!("Join err");
-        return Ok(());
-    }
-    let rec_res = rec_res.unwrap();
+    if receive.is_finished() {
+        let res = receive.await;
 
-    if rec_res.is_err() {
-        return Err(rec_res.unwrap_err());
-    }
+        if res.is_err() {
+            let err = res.unwrap_err();
+            eprintln!("Rec: {}", err);
 
-    let send_res = send_f.await;
+            return Err(anyhow!("Joinm Error idk"));
+        }
 
+        let res = res.unwrap();
+        if res.is_err() {
+            let err = res.unwrap_err();
+            eprintln!("Rec: {}", err);
 
-    if send_res.is_err() {
-        eprintln!("Join err");
-        return Ok(());
-    }
-
-    let send_res = send_res.unwrap();
-
-    if send_res.is_err() {
-        return Err(send_res.unwrap_err());
+            return Err(err);
+        }
     }
 
+    if send_f.is_finished() {
+        let res = send_f.await;
 
+        if res.is_err() {
+            let err = res.unwrap_err();
+            eprintln!("Rec: {}", err);
 
-    println!("Done");
+            return Err(anyhow!("Joinm Error idk"));
+        }
+
+        let res = res.unwrap();
+        if res.is_err() {
+            let err = res.unwrap_err();
+            eprintln!("Send: {}", err);
+
+            return Err(err);
+        }
+    }
     Ok(())
-}
-
-
-async fn _receive_msgs(mut rx: SplitStream<WebSocketGeneral>, curr_id: UserId) -> anyhow::Result<()> {
-    while let Some(msg) = rx.next().await {
-        let msg = msg?;
-        if !msg.is_text() {
-            continue;
-        }
-
-        let msg_txt = msg.to_text().unwrap().to_string();
-        if msg_txt.starts_with("UID:") {
-            let mut state = curr_id.write().unwrap();
-            *state = Some(msg_txt.replace("UID:", "").to_string());
-
-            drop(state);
-
-            println!("Current id set to {:#?}", curr_id.read().unwrap());
-            continue;
-        }
-
-        if msg_txt.starts_with("from:") {
-            let msg_txt = msg_txt.replace("from:", "");
-            let mut parts: Vec<&str> = msg_txt.split(":").collect();
-            let parts_clone = parts.clone();
-
-            let from_id = parts_clone.get(0);
-            if from_id.is_none() {
-                eprintln!("Invalid format of message {}", msg_txt);
-                continue;
-            }
-
-            let from_id = from_id.unwrap();
-            parts.remove(0);
-
-            let msg = parts.join("$");
-            println!("[{}]: {}", from_id, msg);
-        }
-    }
-
-    Ok(())
-}
-
-
-
-async fn _send_msgs(mut tx: SplitSink<WebSocketGeneral, Message>, receiver: String, stdin: std::io::Stdin) -> anyhow::Result<()> {
-    println!("Msgs");
-    loop {
-        println!("Asking you for message:");
-        print!("Message: ");
-
-        let mut line = String::new();
-        stdin.read_line(&mut line).unwrap();
-
-        let line = line.replace("\n", "");
-        let line = line.replace("\r", "");
-
-        println!("Sending message {}", line);
-
-        tx.send(Message::Text(format!("to:{}:{}", receiver, line))).await?;
-    }
 }

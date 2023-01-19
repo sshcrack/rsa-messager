@@ -1,5 +1,6 @@
 // #![deny(warnings)]
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync:: Arc;
 
 use futures_util::lock::Mutex;
@@ -7,10 +8,12 @@ use futures_util::{SinkExt, StreamExt, TryFutureExt};
 use tokio::sync::{mpsc, RwLock};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use uuid::Uuid;
+use warp::hyper::Response;
 use warp::ws::{Message, WebSocket};
 use warp::Filter;
 
 type UsersList = Arc<Mutex<Vec<Uuid>>>;
+type PubKeyList = Arc<Mutex<HashMap<Uuid, String>>>;
 
 /// Our state of currently connected users.
 ///
@@ -26,15 +29,22 @@ async fn main() {
     // is a websocket sender.
 
     let users_list_org = UsersList::default();
-    let users_list_org_clone = users_list_org.clone();
-
-
     let users = Users::default();
+    let pubkey_list_org = PubKeyList::default();
+
+
+    let users_list_org_clone = users_list_org.clone();
+    let pubkey_list_org_clone = pubkey_list_org.clone();
+
+
     // Turn our "state" into a new Filter...
     let users = warp::any().map(move || users.clone());
 
     let users_list = warp::any().map(move || users_list_org.clone());
     let users_list_second = warp::any().map(move || users_list_org_clone.clone());
+
+
+    let pubkey_list = warp::any().map(move || pubkey_list_org.clone());
 
     // GET /chat -> websocket upgrade
     let chat = warp::path("chat")
@@ -42,11 +52,12 @@ async fn main() {
         .and(warp::ws())
         .and(users)
         .and(users_list)
-        .map(|ws: warp::ws::Ws, users, users_list| {
+        .and(pubkey_list)
+        .map(|ws: warp::ws::Ws, users, users_list, pubkey_list| {
             // This will call our function if the handshake succeeds.
 
             ws.on_upgrade(move |socket| {
-                return user_connected(socket, users, users_list);
+                return user_connected(socket, users, users_list, pubkey_list);
             })
         });
 
@@ -60,10 +71,19 @@ async fn main() {
         .and(users_list_second)
         .and_then(on_list);
 
+
+    let pubkey_list = warp::any().map(move || pubkey_list_org_clone.clone());
+    let pubkey_route = warp::path("pubkey")
+    .and(warp::path::end())
+    .and(pubkey_list)
+    .and(warp::query::<HashMap<String, String>>())
+    .and_then(on_pubkey);
+
     let routes = warp::get().and(
         index
         .or(chat)
         .or(list_route)
+        .or(pubkey_route)
     );
 
 
@@ -80,7 +100,36 @@ async fn on_list(users_list: UsersList) -> Result<Box<dyn warp::Reply>, warp::Re
     return Ok(Box::new(warp::reply::json(&vec_str)));
 }
 
-async fn user_connected(ws: WebSocket, users: Users, users_list: UsersList) {
+async fn on_pubkey(pubkey_list: PubKeyList, p: HashMap<String, String>) -> Result<Box<dyn warp::Reply>, warp::Rejection>  {
+    let k = p.get("id");
+    if k.is_none() {
+        return Ok(Box::new(Response::builder().body(String::from("No \"key\" param in query."))));
+    }
+
+    let k = k.unwrap();
+    let uuid = Uuid::from_str(k);
+    if uuid.is_err() {
+        return Ok(Box::new(Response::builder().body(String::from("Invalid uuid"))));
+    }
+
+    let uuid = uuid.unwrap();
+
+    let state = pubkey_list.lock().await;
+    let pubkey = state.get(&uuid);
+
+    if pubkey.is_none() {
+        return Ok(Box::new(Response::builder().body(String::from("Pubkey could not be found"))));
+    }
+
+    let pubkey = pubkey.unwrap().to_string();
+    drop(state);
+
+    return Ok(Box::new(Response::builder().body(pubkey)));
+
+
+}
+
+async fn user_connected(ws: WebSocket, users: Users, users_list: UsersList, pubkey_list: PubKeyList) {
     // Use a counter to assign a new unique ID for this user.
     let user_id = Uuid::new_v4();
     let mut list_lock = users_list.lock().await;
@@ -130,7 +179,7 @@ async fn user_connected(ws: WebSocket, users: Users, users_list: UsersList) {
                 break;
             }
         };
-        user_message(user_id, msg, &users).await;
+        user_message(user_id, msg, &users, &pubkey_list).await;
     }
 
     // user_ws_rx stream will keep processing as long as the user stays
@@ -138,7 +187,7 @@ async fn user_connected(ws: WebSocket, users: Users, users_list: UsersList) {
     user_disconnected(user_id, &users, &users_list).await;
 }
 
-async fn user_message(my_id: Uuid, msg: Message, users: &Users) {
+async fn user_message(my_id: Uuid, msg: Message, users: &Users, pubkey_list: &PubKeyList) {
     // Skip any non-Text messages...
     let msg = if let Ok(s) = msg.to_str() {
         s
@@ -146,10 +195,24 @@ async fn user_message(my_id: Uuid, msg: Message, users: &Users) {
         return;
     };
 
-    if !msg.starts_with("to:") {
+    if msg.starts_with("to:") {
+        handle_msg_to(my_id, msg, users).await;
         return;
     }
 
+    if msg.starts_with("setpubkey:") {
+        // TODO if i want to, check size of key here
+        let msg = msg.replace("setpubkey:", "");
+        let mut state = pubkey_list.lock().await;
+
+        state.insert(my_id, msg);
+        drop(state);
+        println!("Pubkey set.");
+    }
+}
+
+
+async fn handle_msg_to(my_id: Uuid, msg: &str, users: &Users) {
     let mut parts: Vec<&str> = msg.split(":").collect();
     let parts_c = parts.clone();
     let send_to = parts_c.get(1);
@@ -158,7 +221,6 @@ async fn user_message(my_id: Uuid, msg: Message, users: &Users) {
         return;
     }
 
-    println!("{:#?}", parts);
     let send_to = send_to.unwrap();
     parts.remove(0);
     parts.remove(0);
