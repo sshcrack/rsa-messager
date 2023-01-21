@@ -1,2 +1,24 @@
 client/target
 server/target
+
+# dependencies
+client/frontend/node_modules
+client/frontend/.pnp
+client/frontend.pnp.js
+
+# testing
+client/frontend/coverage
+
+# production
+client/frontend/build
+
+# misc
+client/frontend/.DS_Store
+client/frontend/.env.local
+client/frontend/.env.development.local
+client/frontend/.env.test.local
+client/frontend/.env.production.local
+
+client/frontend/npm-debug.log*
+client/frontend/yarn-debug.log*
+client/frontend/yarn-error.log*

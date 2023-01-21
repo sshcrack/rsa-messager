@@ -24,7 +24,7 @@ pub async fn select_receiver(my_id: UserId) -> anyhow::Result<String> {
     let mut available: Vec<String> = serde_json::from_str(&text)?;
     let mut found_index = 9999;
 
-    let state = my_id.read().unwrap();
+    let state = my_id.read().await;
     if state.is_some() {
         let mut i = 0;
         let id = state.as_ref().unwrap();

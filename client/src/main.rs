@@ -1,10 +1,12 @@
-
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::{process::exit};
 use std::error::Error;
 use std::fmt;
 
 use anyhow::anyhow;
-use futures_util::{StreamExt, lock::Mutex};
+use futures_util::{StreamExt};
+use tokio::sync::RwLock;
 use tokio::task;
 use tokio_tungstenite::connect_async;
 
@@ -12,12 +14,13 @@ use crate::encryption::rsa::generate;
 use crate::msg::receive::receive_msgs;
 use crate::msg::send::send_msgs;
 use crate::msg::types::{UserId, Receiver};
-use crate::{input::receiver::select_receiver, consts::BASE_URL};
+use crate::{consts::BASE_URL};
 
 mod encryption;
 mod input;
 mod consts;
 mod msg;
+mod web;
 
 
 
@@ -42,7 +45,6 @@ impl Error for ReqwestError {
 
 #[tokio::main]
 async fn main() {
-    println!("Spawning main thread...");
     let res = task::spawn(_async_main()).await;
     if res.is_err() {
         eprintln!("Main Run Error:");
@@ -62,16 +64,21 @@ async fn _async_main() -> anyhow::Result<()> {
     let curr_id = UserId::default();
 
 
-    let receiver_str = select_receiver(curr_id.clone()).await?;
-    let receiver = Receiver::new(Mutex::new(receiver_str));
+    let send_disabled = Arc::new(AtomicBool::new(true));
+
+    let receiver = Receiver::new(RwLock::new(None));
 
     let (tx, rx) = ws_stream.split();
     let stdin = std::io::stdin();
 
     let keypair = keypair_org.clone();
+
     let temp = curr_id.clone();
+    let temp1 = receiver.clone();
+    let temp2 = send_disabled.clone();
+
     let receive = tokio::spawn(async move {
-        let res = receive_msgs(rx, temp, keypair).await;
+        let res = receive_msgs(rx, temp, keypair, temp1, temp2).await;
         if res.is_err() {
             let err = res.unwrap_err();
             eprintln!("RecErr: {}", err);
@@ -83,8 +90,10 @@ async fn _async_main() -> anyhow::Result<()> {
 
     let keypair = keypair_org.clone();
     let temp = curr_id.clone();
+    let temp2 = send_disabled.clone();
+
     let send_f = tokio::spawn(async move {
-        let res = send_msgs(tx, temp, receiver, stdin, keypair).await;
+        let res = send_msgs(tx, temp, receiver, stdin, keypair, temp2).await;
         if res.is_err() {
             let err = res.unwrap_err();
             eprintln!("SendErr: {}", err);

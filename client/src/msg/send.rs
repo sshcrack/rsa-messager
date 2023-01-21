@@ -1,22 +1,33 @@
-use anyhow::anyhow;
+use std::sync::atomic::Ordering;
+
+use colored::Colorize;
 use futures_util::{stream::SplitSink, SinkExt};
 use openssl::{rsa::Rsa, pkey::Private};
 use tokio_tungstenite::tungstenite::Message;
 
-use crate::{input::receiver::select_receiver, consts::BASE_URL, encryption::rsa::encrypt};
+use crate::{input::receiver::select_receiver, encryption::rsa::encrypt, web::user_info::get_user_info};
 
-use super::types::{WebSocketGeneral, Receiver, UserId};
+use super::types::{WebSocketGeneral, Receiver, UserId, SendDisabled};
 
-pub async fn send_msgs(mut tx: SplitSink<WebSocketGeneral, Message>, my_id: UserId, receiver: Receiver, stdin: std::io::Stdin, keypair: Rsa<Private>) -> anyhow::Result<()> {
+pub async fn send_msgs(mut tx: SplitSink<WebSocketGeneral, Message>, my_id: UserId, receiver: Receiver, stdin: std::io::Stdin, keypair: Rsa<Private>, send_disabled: SendDisabled) -> anyhow::Result<()> {
     let pem_vec = keypair.public_key_to_pem()?;
     let public_key_str = std::str::from_utf8(&pem_vec)?;
 
     let initial_msg = format!("setpubkey:{}", public_key_str);
-    println!("Sending initial message...");
     tx.send(Message::text(initial_msg)).await?;
+    tx.send(Message::text("getuid")).await?;
 
+    println!("Use /rec to change receiver\nUse /name <your name>");
     loop {
-        print!("Message: ");
+        let is_disabled = send_disabled.load(Ordering::Relaxed);
+        if is_disabled { continue; }
+
+        let rec = receiver.read().await;
+        let rec_got = rec.clone();
+        let is_nothing = rec_got.is_none();
+
+        drop(rec);
+        if is_nothing { continue; }
 
         let mut line = String::new();
         stdin.read_line(&mut line).unwrap();
@@ -33,45 +44,41 @@ pub async fn send_msgs(mut tx: SplitSink<WebSocketGeneral, Message>, my_id: User
 
             let new_rec = new_rec.unwrap();
 
-            let mut state = receiver.lock().await;
-            *state = new_rec.clone();
+            let mut state = receiver.write().await;
+            *state = Some(new_rec.clone());
 
             drop(state);
-            println!("Changed receiver to {}.", new_rec);
             continue;
         }
 
-        println!("Sending message {}...", line);
+        if line.starts_with("/name ") {
+            let new_name = line.replace("/name ", "");
+            tx.send(Message::Text(format!("name:{}", new_name))).await?;
 
-        let rec = receiver.lock().await;
-        let rec_got = rec.to_string();
-        drop(rec);
+            println!("Name changed to: {}", new_name);
+            continue;
+        }
 
-        let pubkey_pem = get_pubkey(&rec_got).await?;
+        let rec_got = rec_got.clone().unwrap();
+
+
+        let info = get_user_info(&rec_got).await?;
+        let pubkey_pem = info.public_key;
+
+        if pubkey_pem.is_none() {
+            println!("Could not get pubkey of receiver.");
+            continue;
+
+        }
+
+        let pubkey_pem = pubkey_pem.unwrap();
         let key = Rsa::public_key_from_pem(pubkey_pem.as_bytes())?;
 
         let encrypted = encrypt(key, &line)?;
         let encrypted = hex::encode(encrypted);
 
+        println!("{}you{} {}", "[".to_string().bright_black(), "]:".to_string().bright_black(), line.green().bold());
+
         tx.send(Message::Text(format!("to:{}:{}", rec_got.to_string(), encrypted))).await?;
     }
-}
-
-async fn get_pubkey(uuid: &str) -> anyhow::Result<String>{
-    let list_url = format!("http://{}/pubkey?id={}", BASE_URL, uuid);
-
-    let client = reqwest::Client::new();
-    let resp = client.get(list_url.to_string())
-        .send()
-        .await;
-
-
-    if resp.is_err() {
-        eprintln!("Could not fetch from {}", list_url);
-        return Err(anyhow!(resp.unwrap_err()));
-    }
-
-    let resp = resp.unwrap();
-    let text = resp.text().await?;
-    return Ok(text);
 }
