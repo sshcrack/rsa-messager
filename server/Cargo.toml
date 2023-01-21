@@ -16,3 +16,5 @@ serde = { version = "1.0.152", features = ["serde_derive"] }
 clap = { version = "4.1.1", features = ["derive"] }
 warp = "0.3.3"
 colorize = "0.1.0"
+anyhow = "1.0.68"
+rsa = "0.8.0"

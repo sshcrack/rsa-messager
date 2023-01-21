@@ -1,3 +1,3 @@
 pub mod disconnect;
 pub mod connect;
-pub mod message;
+pub mod messages;

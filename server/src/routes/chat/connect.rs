@@ -4,7 +4,7 @@ use tokio_stream::wrappers::UnboundedReceiverStream;
 use uuid::Uuid;
 use warp::ws::WebSocket;
 
-use crate::{utils::types::{Users, UsersList, UserInfo}, routes::chat::{message::user_message, disconnect::user_disconnected}};
+use crate::{utils::types::{Users, UsersList, UserInfo}, routes::chat::{disconnect::user_disconnected, messages::index::user_message}};
 
 
 pub async fn user_connected(ws: WebSocket, users: Users, users_list: UsersList) {

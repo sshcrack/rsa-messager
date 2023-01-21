@@ -8,7 +8,8 @@ use super::{info::on_info, list::on_list};
 
 pub async fn serve_routes(addr: impl Into<SocketAddr>, users: Users, list: UsersList) {
     // GET / -> index html
-    let index = warp::path::end().map(|| warp::reply::html(get_index()));
+    let index = warp::path::end()
+    .and_then(get_index);
 
     let t_users = users.clone();
     let t_list = list.clone();

@@ -27,11 +27,11 @@ pub type UsersList = Arc<Mutex<Vec<Uuid>>>;
 #[derive(Parser, Debug)]
 #[command(author="sshcrack", about="A server to host rsa-encrypted messaging between clients", long_about = None)]
 pub struct Args {
-    /// Name of the person to greet
+    /// Address to bind to
     #[arg(long, short='b')]
     pub bind: Option<std::net::IpAddr>,
 
-    /// Number of times to greet
+    /// Specifies on which port server should listen to
     #[arg(
         short='p',
         long,
