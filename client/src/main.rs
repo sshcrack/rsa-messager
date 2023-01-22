@@ -5,9 +5,7 @@ use std::process::exit;
 use anyhow::anyhow;
 use clap::Parser;
 use futures_util::StreamExt;
-use tokio::sync::mpsc;
 use tokio::task;
-use tokio_stream::wrappers::UnboundedReceiverStream;
 use tokio_tungstenite::connect_async;
 use util::consts::{RECEIVE_TX, RECEIVE_RX};
 
@@ -156,10 +154,9 @@ async fn _async_main() -> anyhow::Result<()> {
 }
 
 
-
 pub async fn initialize_consts() {
-    let (tx, rx) = mpsc::unbounded_channel();
-    let rx = UnboundedReceiverStream::new(rx);
+    println!("Initializing Channels...");
+    let (tx, rx) = async_channel::unbounded::<String>();
 
     let mut state = RECEIVE_TX.write().await;
     *state = Some(tx);

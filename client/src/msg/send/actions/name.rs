@@ -18,7 +18,7 @@ pub async fn on_name(line: &str) -> anyhow::Result<()> {
 
     send_msg(Message::Binary(to_send)).await?;
 
-    let e = format!("Name changed to: {}", new_name).blue();
+    let e = format!("Name changed to: {}", new_name).bright_blue();
     println!("{}", e);
     return Ok(());
 }

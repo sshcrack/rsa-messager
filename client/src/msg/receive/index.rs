@@ -9,6 +9,7 @@ use crate::util::modes::Modes;
 use crate::util::vec::decque_to_vec;
 
 use super::packets::file_question::on_file_question;
+use super::packets::file_question_reply::on_file_question_reply;
 use super::packets::{from::on_from, uid::on_uid};
 
 pub async fn receive_msgs(
@@ -56,6 +57,11 @@ pub async fn handle(
         return Ok(());
     }
 
+    if Modes::SendFileQuestionReply.is_indicator(&mode) {
+        on_file_question_reply(&mut data).await?;
+        return Ok(());
+    }
+
     if Modes::UidReply.is_indicator(&mode) {
         on_uid(&mut data).await?;
         return Ok(());
@@ -63,3 +69,4 @@ pub async fn handle(
 
     return Err(anyhow!("Invalid packet received."));
 }
+

@@ -1,7 +1,7 @@
 use std::sync::atomic::Ordering;
 
 use colored::Colorize;
-use futures_util::{SinkExt, StreamExt};
+use futures_util::SinkExt;
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::util::consts::{RECEIVE_INPUT, RECEIVE_RX};
@@ -31,19 +31,16 @@ pub async fn send_msg(msg: Message) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub async fn get_input() -> anyhow::Result<Option<String>> {
+pub async fn get_input() -> anyhow::Result<String> {
     RECEIVE_INPUT.store(true, Ordering::Relaxed);
 
-    println!("Write");
-    let mut state = RECEIVE_RX.write().await;
-
-    println!("Waiting for next...");
-    let res = state.as_mut().unwrap().next().await;
+    let state = RECEIVE_RX.write().await;
+    let rx = state.clone().unwrap();
 
     drop(state);
 
-    println!("Got input {:#?}", res);
+    let e = rx.recv().await;
     RECEIVE_INPUT.store(false, Ordering::Relaxed);
 
-    Ok(res)
+    Ok(e?)
 }

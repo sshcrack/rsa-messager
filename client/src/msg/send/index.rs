@@ -30,6 +30,11 @@ pub async fn send_msgs() -> anyhow::Result<()> {
     println!("Use /rec to change receiver\nUse /name <your name>");
 
     let stdin = stdin();
+
+    let state = RECEIVE_TX.write().await;
+    let tx = state.clone().unwrap();
+    drop(state);
+
     loop {
         let is_disabled = SEND_DISABLED.load(Ordering::Relaxed);
         if is_disabled {
@@ -53,15 +58,14 @@ pub async fn send_msgs() -> anyhow::Result<()> {
         let line = line.replace("\r", "");
 
         let should_receive = RECEIVE_INPUT.load(Ordering::Relaxed);
-        println!("Disabled is {} line is {}", is_disabled, line);
         if should_receive {
-            println!("Sending line {} to tx", line.clone());
-            let state = RECEIVE_TX.write().await;
-            let e = state.as_ref().unwrap().send(line.clone());
+            let temp = tx.clone();
 
-            drop(state);
-            println!("Dropped");
-            println!("{:?}", e);
+            tokio::task::spawn(async move {
+                temp.send(line.clone()).await
+            });
+
+            tokio::task::yield_now().await;
             continue;
         }
 

@@ -5,7 +5,7 @@ use warp::ws::Message;
 
 use crate::utils::{types::Users, modes::Modes, tools::{vec_to_decque, decque_to_vec}};
 
-use super::{name::on_name, pubkey::on_pubkey, to::on_to, uid::on_uid, file_question::on_file_question};
+use super::{name::on_name, pubkey::on_pubkey, to::on_to, uid::on_uid, file_question::on_file_question, file_question_reply::on_file_question_reply};
 
 pub async fn user_message(my_id: Uuid, msg: Message, users: &Users, tx: &UnboundedSender<Message>) -> anyhow::Result<()> {
     let msg = msg.into_bytes();
@@ -25,7 +25,7 @@ pub async fn user_message(my_id: Uuid, msg: Message, users: &Users, tx: &Unbound
     }
 
     if Modes::To.is_indicator(&mode) {
-        return on_to(msg, &users).await;
+        return on_to(msg, &my_id, &users).await;
     }
 
     if Modes::SetPubkey.is_indicator(&mode) {
@@ -38,6 +38,10 @@ pub async fn user_message(my_id: Uuid, msg: Message, users: &Users, tx: &Unbound
 
     if Modes::SendFileQuestion.is_indicator(&mode) {
         return on_file_question(&msg, &my_id, &users).await;
+    }
+
+    if Modes::SendFileQuestionReply.is_indicator(&mode) {
+        return on_file_question_reply(&msg, &my_id, &users).await;
     }
 
     Err(anyhow!("Invalid packet mode."))

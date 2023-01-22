@@ -12,8 +12,8 @@ pub fn is_command(line: &str, aliases: Vec<&str>) -> bool{
 }
 pub fn get_help_str() -> String {
     let rec_cmd = format!("{}: {}", "/receiver".bold().bright_blue(), "Change the user you want to write a message to / send a file to.".bright_black());
-    let name_cmd = format!("{} {}: {}", "/name".bold().bright_blue(), "<name>".blue(), "Changes your display name to the given name".bright_black());
-    let send_cmd = format!("{} {}: {}", "/send".bold().bright_blue(), "<file>".blue(), "Send a file to the other user".bright_black());
+    let name_cmd = format!("{} {}: {}", "/name".bold().bright_blue(), "<name>".bright_blue(), "Changes your display name to the given name".bright_black());
+    let send_cmd = format!("{} {}: {}", "/send".bold().bright_blue(), "<file>".bright_blue(), "Send a file to the other user".bright_black());
 
     return format!("--------------------\n{}\n{}\n{}\n-----------------", rec_cmd, name_cmd, send_cmd);
 }

@@ -1,11 +1,11 @@
 use std::sync::{atomic::AtomicBool, Arc};
 
+use async_channel::{Receiver, Sender};
 use clap::{arg, command, Parser};
 use futures_util::{stream::{SplitSink, SplitStream}, lock::Mutex};
 use openssl::{pkey::Private, rsa::Rsa};
 use serde::{Deserialize, Serialize};
-use tokio::{net::TcpStream, sync::{RwLock, mpsc::UnboundedSender}};
-use tokio_stream::wrappers::UnboundedReceiverStream;
+use tokio::{net::TcpStream, sync::RwLock};
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, tungstenite::Message};
 use uuid::Uuid;
 
@@ -14,7 +14,7 @@ pub type BaseUrl = Arc<RwLock<String>>;
 pub type SendDisabled = Arc<AtomicBool>;
 pub type ReceiveInput = Arc<AtomicBool>;
 pub type UserId = Arc<RwLock<Option<Uuid>>>;
-pub type Receiver = Arc<RwLock<Option<Uuid>>>;
+pub type ReceiverArc = Arc<RwLock<Option<Uuid>>>;
 pub type WebSocketGeneral = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
 pub type TXChannel = SplitSink<WebSocketGeneral, Message>;
@@ -22,8 +22,8 @@ pub type TXChannelArc = Arc<Mutex<Option<TXChannel>>>;
 
 pub type RXChannel = SplitStream<WebSocketGeneral>;
 
-pub type ReceiveRX = UnboundedReceiverStream<String>;
-pub type ReceiveTX = UnboundedSender<String>;
+pub type ReceiveRX = Receiver<String>;
+pub type ReceiveTX = Sender<String>;
 
 #[derive(Serialize, Deserialize)]
 pub struct UserInfoBasic {
