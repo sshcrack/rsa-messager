@@ -12,7 +12,7 @@ use tokio_tungstenite::connect_async;
 use crate::encryption::rsa::generate;
 use crate::msg::receive::index::receive_msgs;
 use crate::msg::send::index::send_msgs;
-use crate::util::consts::{BASE_URL, KEYPAIR};
+use crate::util::consts::{BASE_URL, KEYPAIR, TX_CHANNEL};
 use crate::util::types::{Args};
 
 mod encryption;
@@ -75,12 +75,15 @@ async fn _async_main() -> anyhow::Result<()> {
 
     let ws_url = format!("ws://{}/chat", base_url);
 
-    println!("Connecting to {}...", ws_url.to_string());
+    println!("Connecting to {} ...", ws_url.to_string());
 
     let (ws_stream, _) = connect_async(ws_url.to_string()).await?;
 
     let (tx, rx) = ws_stream.split();
-    let stdin = stdin();
+    let mut state = TX_CHANNEL.lock().await;
+    *state = Some(tx);
+
+    drop(state);
 
 
     let receive = tokio::spawn(async move {
@@ -94,8 +97,9 @@ async fn _async_main() -> anyhow::Result<()> {
         return Ok(());
     });
 
+    let stdin = stdin();
     let send_f = tokio::spawn(async move {
-        let res = send_msgs(tx, stdin).await;
+        let res = send_msgs(stdin).await;
         if res.is_err() {
             let err = res.unwrap_err();
             eprintln!("SendErr: {}", err);
@@ -105,9 +109,8 @@ async fn _async_main() -> anyhow::Result<()> {
         return Ok(());
     });
 
-
     task::yield_now().await;
-    while !receive.is_finished() && !send_f.is_finished() {}
+    while !receive.is_finished()&& !send_f.is_finished() {}
 
     if receive.is_finished() {
         let res = receive.await;

@@ -2,20 +2,14 @@ use std::collections::VecDeque;
 
 use warp::ws::Message;
 
-use crate::utils::{types::Users, tools::{uuid_from_vec, vec_to_decque, decque_to_vec}, modes::Modes};
+use crate::utils::{types::Users, tools::{uuid_from_vec, vec_to_decque, decque_to_vec, send_msg_specific}, modes::Modes};
 
 
-pub async fn on_to(msg: Vec<u8>, users: &Users) {
+pub async fn on_to(msg: Vec<u8>, users: &Users) -> anyhow::Result<()> {
     let mut msg = msg.to_vec();
 
-    let send_to = uuid_from_vec(&mut msg);
-    if send_to.is_err() {
-        eprintln!("Invalid format: {}", send_to.unwrap_err());
-        return;
-    }
+    let send_to = uuid_from_vec(&mut msg)?;
 
-    let send_to = send_to.unwrap();
-    println!("Uuid {} obtained.", send_to);
     let mut merged = VecDeque::new();
 
     let mut uuid_bytes = vec_to_decque(send_to.as_bytes().to_vec());
@@ -27,16 +21,7 @@ pub async fn on_to(msg: Vec<u8>, users: &Users) {
     let merged = decque_to_vec(merged);
     let packet = Modes::From.get_send(&merged);
 
-    // New message from this user, send it to everyone else (except same uid)...
-    for (&uid, info) in users.read().await.iter() {
-        if send_to.to_string().eq(&uid.to_string()) {
-            let tx = &info.sender;
+    send_msg_specific(send_to, users, Message::binary(packet)).await?;
 
-            if let Err(_disconnected) = tx.send(Message::binary(packet.clone())) {
-                // The tx is disconnected, our `user_disconnected` code
-                // should be happening in another task, nothing more to
-                // do here.
-            }
-        }
-    }
+    Ok(())
 }

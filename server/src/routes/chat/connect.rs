@@ -59,7 +59,10 @@ pub async fn user_connected(ws: WebSocket, users: Users, users_list: UsersList) 
                 break;
             }
         };
-        user_message(user_id, msg, &users, &tx).await;
+        let e = user_message(user_id, msg, &users, &tx).await;
+        if e.is_err() {
+            eprintln!("WebsocketErr: {}", e.unwrap_err());
+        }
     }
 
     // user_ws_rx stream will keep processing as long as the user stays

@@ -1,6 +1,6 @@
-use crate::{util::{types::TXChannel, consts::RECEIVER}, input::receiver::select_receiver};
+use crate::{util::consts::RECEIVER, input::receiver::select_receiver};
 
-pub async fn on_receiver(_tx: &mut TXChannel, _line: &str) -> anyhow::Result<()> {
+pub async fn on_receiver(_line: &str) -> anyhow::Result<()> {
     let new_rec = select_receiver().await;
     if new_rec.is_err() {
         return Err(new_rec.unwrap_err());

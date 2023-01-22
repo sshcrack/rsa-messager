@@ -1,6 +1,4 @@
-use colored::Colorize;
-
-use crate::{encryption::rsa::decrypt, util::tools::{uuid_from_vec, get_curr_keypair}, web::user_info::get_user_info};
+use crate::{encryption::rsa::decrypt, util::{tools::uuid_from_vec, arcs::get_curr_keypair, msg::print_from_msg}, web::user_info::get_user_info};
 
 pub async fn on_from(data: &mut Vec<u8>) -> anyhow::Result<()> {
     let from_id = uuid_from_vec(data)?;
@@ -24,12 +22,6 @@ pub async fn on_from(data: &mut Vec<u8>) -> anyhow::Result<()> {
         display_name = temp;
     }
 
-    println!(
-        "{}{}{} {}",
-        "[".to_string().bright_black(),
-        display_name,
-        "]:".to_string().bright_black(),
-        msg.green().bold()
-    );
+    print_from_msg(&display_name, &msg);
     Ok(())
 }

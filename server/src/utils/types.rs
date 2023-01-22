@@ -3,7 +3,7 @@ use std::{sync::Arc, collections::HashMap};
 use clap::Parser;
 use futures_util::lock::Mutex;
 use serde::{Serialize, Deserialize};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{mpsc::{self, UnboundedSender}, RwLock};
 use uuid::Uuid;
 use warp::ws::Message;
 
@@ -22,6 +22,8 @@ pub struct UserInfo {
 
 pub type Users = Arc<RwLock<HashMap<Uuid, UserInfo>>>;
 pub type UsersList = Arc<Mutex<Vec<Uuid>>>;
+
+pub type TXChannel = UnboundedSender<Message>;
 
 /// A server to host rsa-encrypted messaging between clients
 #[derive(Parser, Debug)]

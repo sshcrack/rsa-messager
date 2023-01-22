@@ -1,4 +1,5 @@
 use std::sync::{Arc, atomic::AtomicBool};
+use futures_util::lock::Mutex;
 use tokio::sync::RwLock;
 
 use lazy_static::lazy_static;
@@ -12,4 +13,8 @@ lazy_static! {
     pub static ref SEND_DISABLED: SendDisabled = Arc::new(AtomicBool::new(true));
     pub static ref RECEIVER: Receiver = Receiver::new(RwLock::new(None));
     pub static ref KEYPAIR: Keypair = Arc::new(RwLock::new(None));
+
+    pub static ref TX_CHANNEL: TXChannelArc = Arc::new(Mutex::new(None));
+
+    pub static ref ABORT_TX: AbortTx = Arc::new(RwLock::new(None));
 }

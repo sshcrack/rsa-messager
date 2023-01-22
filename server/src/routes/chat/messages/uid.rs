@@ -1,16 +1,12 @@
-use tokio::sync::mpsc::UnboundedSender;
 use uuid::Uuid;
 use warp::ws::Message;
 
-use crate::utils::modes::Modes;
+use crate::utils::{modes::Modes, types::TXChannel, tools::send_msg};
 
-pub fn on_uid(my_id: &Uuid, tx: &UnboundedSender<Message>) {
-
-    let my_id_b = my_id.to_string().as_bytes().to_vec();
+pub fn on_uid(my_id: &Uuid, tx: &TXChannel) -> anyhow::Result<()> {
+    let my_id_b = my_id.as_bytes().to_vec();
     let packet = Modes::UidReply.get_send(&my_id_b);
 
-    let res = tx.send(Message::binary(packet));
-    if res.is_err() {
-        eprintln!("{}", res.unwrap_err());
-    }
+    send_msg(tx, Message::binary(packet))?;
+    Ok(())
 }

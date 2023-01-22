@@ -1,24 +1,23 @@
-use std::{str::FromStr, sync::atomic::Ordering};
+use std::sync::atomic::Ordering;
 
 use colored::Colorize;
-use uuid::Uuid;
 
 use crate::{
     input::receiver::select_receiver,
-    util::{consts::{CURR_ID, RECEIVER, SEND_DISABLED}},
+    util::{consts::{RECEIVER, SEND_DISABLED, CURR_ID}, tools::uuid_from_vec},
 };
 
 pub async fn on_uid(
-    rec: &str
+    data: &mut Vec<u8>
 ) -> anyhow::Result<()> {
-    let mut state = CURR_ID.write().await;
-    let uuid = Uuid::from_str(rec)?;
+    let uuid = uuid_from_vec(data)?;
 
-    *state = Some(uuid.clone());
+    println!("Current id set to {}", uuid);
+    let mut state = CURR_ID.write().await;
+    *state = Some(uuid);
 
     drop(state);
 
-    println!("Current id set to {}", rec);
     let e = select_receiver().await?;
     let mut state = RECEIVER.write().await;
     *state = Some(e);

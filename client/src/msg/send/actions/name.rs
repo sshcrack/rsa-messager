@@ -1,10 +1,9 @@
 use colored::Colorize;
-use futures_util::SinkExt;
 use tokio_tungstenite::tungstenite::Message;
 
-use crate::util::{types::TXChannel, modes::Modes};
+use crate::util::{modes::Modes, msg::send_msg};
 
-pub async fn on_name(tx: &mut TXChannel, line: &str) -> anyhow::Result<()> {
+pub async fn on_name(line: &str) -> anyhow::Result<()> {
     let new_name = line.split(" ");
     let new_name = Vec::from_iter(new_name.skip(1)).join(" ");
 
@@ -17,7 +16,7 @@ pub async fn on_name(tx: &mut TXChannel, line: &str) -> anyhow::Result<()> {
     let to_send = Modes::Name.get_send(&name_byte);
 
 
-    tx.send(Message::Binary(to_send)).await?;
+    send_msg(Message::Binary(to_send)).await?;
 
     let e = format!("Name changed to: {}", new_name).blue();
     println!("{}", e);

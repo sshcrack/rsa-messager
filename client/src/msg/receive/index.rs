@@ -1,16 +1,18 @@
 use std::collections::VecDeque;
 
 use anyhow::anyhow;
-use futures_util::{stream::SplitStream, StreamExt};
+use futures_util::StreamExt;
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::util::types::*;
-use crate::util::{modes::Modes, tools::decque_to_vec};
+use crate::util::modes::Modes;
+use crate::util::vec::decque_to_vec;
 
+use super::packets::file_question::on_file_question;
 use super::packets::{from::on_from, uid::on_uid};
 
 pub async fn receive_msgs(
-    mut rx: SplitStream<WebSocketGeneral>
+    mut rx: RXChannel
 ) -> anyhow::Result<()> {
     while let Some(msg) = rx.next().await {
         let msg = msg?;
@@ -44,17 +46,18 @@ pub async fn handle(
     let mode = mode.unwrap();
     let mut data = decque_to_vec(decque);
 
-    let text_parse = String::from_utf8(data.clone());
-    if text_parse.is_ok() {
-        let msg = text_parse.unwrap();
-        if Modes::UidReply.is_indicator(&mode) {
-            on_uid(&msg).await?;
-            return Ok(());
-        }
-    }
-
     if Modes::From.is_indicator(&mode) {
         on_from(&mut data).await?;
+        return Ok(());
+    }
+
+    if Modes::SendFileQuestion.is_indicator(&mode) {
+        on_file_question(&mut data).await?;
+        return Ok(());
+    }
+
+    if Modes::UidReply.is_indicator(&mode) {
+        on_uid(&mut data).await?;
         return Ok(());
     }
 

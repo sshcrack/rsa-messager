@@ -22,3 +22,4 @@ colored = "2.0.0"
 uuid = { version = "1.2.2", features = ["v4", "fast-rng", "macro-diagnostics"] }
 clap = { version = "4.1.1", features = ["derive"] }
 lazy_static = "1.4.0"
+futures-either = "0.1.0"
