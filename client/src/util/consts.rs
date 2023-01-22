@@ -16,5 +16,8 @@ lazy_static! {
 
     pub static ref TX_CHANNEL: TXChannelArc = Arc::new(Mutex::new(None));
 
-    pub static ref ABORT_TX: AbortTx = Arc::new(RwLock::new(None));
+    pub static ref RECEIVE_TX: Arc<RwLock<Option<ReceiveTX>>> = Arc::new(RwLock::new(None));
+    pub static ref RECEIVE_RX: Arc<RwLock<Option<ReceiveRX>>> = Arc::new(RwLock::new(None));
+
+    pub static ref RECEIVE_INPUT: ReceiveInput = Arc::new(AtomicBool::new(false));
 }

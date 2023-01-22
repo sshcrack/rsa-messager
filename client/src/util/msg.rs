@@ -1,11 +1,12 @@
 use std::sync::atomic::Ordering;
 
-use anyhow::anyhow;
 use colored::Colorize;
-use futures_util::SinkExt;
+use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::tungstenite::Message;
 
-use super::consts::{TX_CHANNEL, ABORT_TX, SEND_DISABLED};
+use crate::util::consts::{RECEIVE_INPUT, RECEIVE_RX};
+
+use super::consts::TX_CHANNEL;
 
 
 pub fn print_from_msg(display_name: &str, msg: &str) {
@@ -30,43 +31,19 @@ pub async fn send_msg(msg: Message) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub async fn lock_input() -> anyhow::Result<()> {
-    SEND_DISABLED.store(true, Ordering::Relaxed);
+pub async fn get_input() -> anyhow::Result<Option<String>> {
+    RECEIVE_INPUT.store(true, Ordering::Relaxed);
 
-    let rx = ABORT_TX.read().await;
-    if rx.is_none() {
-        drop(rx);
+    println!("Write");
+    let mut state = RECEIVE_RX.write().await;
 
-        SEND_DISABLED.store(false, Ordering::Relaxed);
-        return Err(anyhow!("Could not lock input, rx is null."));
-    }
+    println!("Waiting for next...");
+    let res = state.as_mut().unwrap().next().await;
 
-    let rx_u = rx.as_ref().unwrap();
-    let res = rx_u.send(true);
-    drop(rx);
+    drop(state);
 
-    if res.is_err() {
-        SEND_DISABLED.store(false, Ordering::Relaxed);
-    }
-    res?;
+    println!("Got input {:#?}", res);
+    RECEIVE_INPUT.store(false, Ordering::Relaxed);
 
-
-    Ok(())
-}
-
-
-pub async fn release_input() -> anyhow::Result<()> {
-    SEND_DISABLED.store(false, Ordering::Relaxed);
-
-    let rx = ABORT_TX.read().await;
-    if rx.is_none() {
-        drop(rx);
-        return Err(anyhow!("Could not release input, rx is null."));
-    }
-    let rx_u = rx.as_ref().unwrap();
-    rx_u.send(false)?;
-
-    drop(rx);
-
-    Ok(())
+    Ok(res)
 }

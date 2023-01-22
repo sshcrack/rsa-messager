@@ -1,17 +1,13 @@
 use std::collections::VecDeque;
-use std::io::{Stdin, stdin};
+use std::io::stdin;
 use std::sync::atomic::Ordering;
 
-use futures_either::either;
-use futures_util::StreamExt;
 use openssl::rsa::Rsa;
-use tokio::sync::mpsc;
-use tokio_stream::wrappers::UnboundedReceiverStream;
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::msg::send::actions::index::on_command;
 use crate::util::arcs::get_curr_keypair;
-use crate::util::consts::{SEND_DISABLED, RECEIVER, ABORT_TX};
+use crate::util::consts::{SEND_DISABLED, RECEIVER, RECEIVE_INPUT, RECEIVE_TX};
 use crate::util::modes::Modes;
 use crate::util::msg::{send_msg, print_from_msg};
 use crate::util::vec::{vec_to_decque, decque_to_vec};
@@ -19,8 +15,7 @@ use crate::{
     encryption::rsa::encrypt,
     web::user_info::get_user_info,
 };
-
-pub async fn send_msgs(_stdin: Stdin) -> anyhow::Result<()> {
+pub async fn send_msgs() -> anyhow::Result<()> {
     let keypair = get_curr_keypair().await?;
     let pem_vec = keypair.public_key_to_pem()?;
 
@@ -32,16 +27,9 @@ pub async fn send_msgs(_stdin: Stdin) -> anyhow::Result<()> {
     send_msg(Message::binary(initial_msg)).await?;
     send_msg(Message::binary(get_uid)).await?;
 
-
-    let (tx, rx) = mpsc::unbounded_channel::<bool>();
-    let mut rx = UnboundedReceiverStream::new(rx);
-
-    let mut state = ABORT_TX.write().await;
-    *state = Some(tx);
-
-    drop(state);
-
     println!("Use /rec to change receiver\nUse /name <your name>");
+
+    let stdin = stdin();
     loop {
         let is_disabled = SEND_DISABLED.load(Ordering::Relaxed);
         if is_disabled {
@@ -57,39 +45,25 @@ pub async fn send_msgs(_stdin: Stdin) -> anyhow::Result<()> {
             continue;
         }
 
-        let stdin_thread = tokio::spawn(async move {
-            let mut line = String::new();
-            let stdin = stdin();
-            println!("Reading line...");
-            stdin.read_line(&mut line).unwrap();
 
-            println!("Done reading line.");
-            return line;
-        });
+        let mut line = String::new();
 
-        let listen_thread = rx.next();
-        let future = either(stdin_thread, listen_thread).await;
-        if future.is_right() {
-            println!("Listening cancelled. Returning.");
-            continue;
-        }
-
-        if !future.is_left() {
-            eprintln!("Unknown error, somehow left is not there");
-            continue;
-        }
-
-        let line = future.unwrap_left();
-        println!("Left is something");
-        if line.is_err() {
-            eprintln!("Error when joining to listen for stdin: {}", line.unwrap_err());
-            continue;
-        }
-
-        let line = line.unwrap();
-
+        stdin.read_line(&mut line)?;
         let line = line.replace("\n", "");
         let line = line.replace("\r", "");
+
+        let should_receive = RECEIVE_INPUT.load(Ordering::Relaxed);
+        println!("Disabled is {} line is {}", is_disabled, line);
+        if should_receive {
+            println!("Sending line {} to tx", line.clone());
+            let state = RECEIVE_TX.write().await;
+            let e = state.as_ref().unwrap().send(line.clone());
+
+            drop(state);
+            println!("Dropped");
+            println!("{:?}", e);
+            continue;
+        }
 
         if line.starts_with("/") {
             on_command(&line).await?;

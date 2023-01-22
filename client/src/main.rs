@@ -1,13 +1,15 @@
 use std::error::Error;
 use std::fmt;
-use std::io::stdin;
 use std::process::exit;
 
 use anyhow::anyhow;
 use clap::Parser;
 use futures_util::StreamExt;
+use tokio::sync::mpsc;
 use tokio::task;
+use tokio_stream::wrappers::UnboundedReceiverStream;
 use tokio_tungstenite::connect_async;
+use util::consts::{RECEIVE_TX, RECEIVE_RX};
 
 use crate::encryption::rsa::generate;
 use crate::msg::receive::index::receive_msgs;
@@ -57,6 +59,8 @@ async fn main() {
 }
 
 async fn _async_main() -> anyhow::Result<()> {
+    initialize_consts().await;
+
     let args = Args::parse();
     let base_url = args.address.unwrap_or("localhost:3030".to_string());
 
@@ -97,9 +101,8 @@ async fn _async_main() -> anyhow::Result<()> {
         return Ok(());
     });
 
-    let stdin = stdin();
     let send_f = tokio::spawn(async move {
-        let res = send_msgs(stdin).await;
+        let res = send_msgs().await;
         if res.is_err() {
             let err = res.unwrap_err();
             eprintln!("SendErr: {}", err);
@@ -150,4 +153,21 @@ async fn _async_main() -> anyhow::Result<()> {
         }
     }
     Ok(())
+}
+
+
+
+pub async fn initialize_consts() {
+    let (tx, rx) = mpsc::unbounded_channel();
+    let rx = UnboundedReceiverStream::new(rx);
+
+    let mut state = RECEIVE_TX.write().await;
+    *state = Some(tx);
+
+    drop(state);
+
+    let mut state = RECEIVE_RX.write().await;
+    *state = Some(rx);
+
+    drop(state);
 }
