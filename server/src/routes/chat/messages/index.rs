@@ -3,7 +3,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use uuid::Uuid;
 use warp::ws::Message;
 
-use crate::utils::{types::Users, modes::Modes, tools::{vec_to_decque, decque_to_vec}};
+use crate::utils::{types::Users, modes::Modes, vec::{vec_to_decque, decque_to_vec}};
 
 use super::{name::on_name, pubkey::on_pubkey, to::on_to, uid::on_uid, file_question::on_file_question, file_question_reply::on_file_question_reply};
 
@@ -13,7 +13,7 @@ pub async fn user_message(my_id: Uuid, msg: Message, users: &Users, tx: &Unbound
     let mode = msg.pop_front();
 
     if mode.is_none() {
-        eprintln!("Invalid mode.");
+        eprintln!("Invalid mode.  (is none)");
         return Err(anyhow!("Invalid mode."));
     }
 
@@ -41,7 +41,7 @@ pub async fn user_message(my_id: Uuid, msg: Message, users: &Users, tx: &Unbound
     }
 
     if Modes::SendFileQuestionReply.is_indicator(&mode) {
-        return on_file_question_reply(&msg, &my_id, &users).await;
+        return on_file_question_reply(&msg,  &users).await;
     }
 
     Err(anyhow!("Invalid packet mode."))

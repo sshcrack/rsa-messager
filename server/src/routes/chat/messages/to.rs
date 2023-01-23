@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use uuid::Uuid;
 use warp::ws::Message;
 
-use crate::utils::{types::Users, tools::{uuid_from_vec, vec_to_decque, decque_to_vec, send_msg_specific}, modes::Modes};
+use crate::utils::{types::Users, tools::{uuid_from_vec, send_msg_specific}, modes::Modes, vec::{vec_to_decque, decque_to_vec}};
 
 
 pub async fn on_to(msg: Vec<u8>, my_id: &Uuid, users: &Users) -> anyhow::Result<()> {

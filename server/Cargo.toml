@@ -16,5 +16,9 @@ serde = { version = "1.0.152", features = ["serde_derive"] }
 clap = { version = "4.1.1", features = ["derive"] }
 warp = "0.3.3"
 colorize = "0.1.0"
-anyhow = "1.0.68"
+anyhow = { version = "1.0.68", features = ["backtrace"] }
 rsa = "0.8.0"
+lazy_static = "1.4.0"
+string-error = "0.1.0"
+log = "0.4.17"
+packets = { path = "../packets" }

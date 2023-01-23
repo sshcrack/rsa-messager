@@ -7,6 +7,8 @@ use crate::utils::types::*;
 
 mod utils;
 mod routes;
+mod file;
+mod msg;
 
 #[tokio::main]
 async fn main() {

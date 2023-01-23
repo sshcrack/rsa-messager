@@ -1,4 +1,5 @@
 use futures_util::{StreamExt, SinkExt, TryFutureExt};
+use log::info;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use uuid::Uuid;
@@ -15,7 +16,7 @@ pub async fn user_connected(ws: WebSocket, users: Users, users_list: UsersList) 
 
     drop(list_lock);
 
-    println!("new chat user: {}", user_id);
+    info!("new chat user: {}", user_id);
 
     // Split the socket into a sender and receive of messages.
     let (mut user_ws_tx, mut user_ws_rx) = ws.split();
@@ -30,7 +31,7 @@ pub async fn user_connected(ws: WebSocket, users: Users, users_list: UsersList) 
             user_ws_tx
                 .send(message)
                 .unwrap_or_else(|e| {
-                    eprintln!("websocket send error: {}", e);
+                    eprintln!("websocket send error: {:?}", e);
                 })
                 .await;
         }
@@ -55,13 +56,14 @@ pub async fn user_connected(ws: WebSocket, users: Users, users_list: UsersList) 
         let msg = match result {
             Ok(msg) => msg,
             Err(e) => {
-                eprintln!("websocket error(uid={}): {}", user_id, e);
+                eprintln!("websocket error(uid={}): {:?}", user_id, e);
                 break;
             }
         };
         let e = user_message(user_id, msg, &users, &tx).await;
         if e.is_err() {
-            eprintln!("WebsocketErr: {}", e.unwrap_err());
+            let x = e.unwrap_err();
+            eprintln!("WebsocketErr: {:#?}", x);
         }
     }
 

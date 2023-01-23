@@ -1,3 +1,4 @@
+use log::debug;
 use rsa::{RsaPublicKey, pkcs8::DecodePublicKey};
 use uuid::Uuid;
 
@@ -14,10 +15,10 @@ pub async fn on_pubkey(msg: &Vec<u8>, my_id: &Uuid, users: &Users) -> anyhow::Re
 
     if info.is_some() {
         let i = info.unwrap();
-        i.public_key = Some(pubkey);
+        i.public_key = Some(pubkey.clone());
     }
 
     drop(state);
-    println!("Pubkey set.");
+    debug!("Pubkey set. len: {}", pubkey.len());
     Ok(())
 }

@@ -21,7 +21,7 @@ pub async fn receive_msgs(
         if res.is_err() {
             eprintln!("----------------------------------");
             eprintln!("Error occurred while processing message: ");
-            eprintln!("{}", res.unwrap_err());
+            eprintln!("{:?}", res.unwrap_err());
             eprintln!("----------------------------------");
         }
     }

@@ -1,6 +1,7 @@
 use std::{collections::HashMap, net::SocketAddr};
 
 use colorize::AnsiColor;
+use log::info;
 use warp::Filter;
 use crate::{utils::types::{Users, UsersList}, routes::{chat::connect::user_connected, index::get_index}};
 

@@ -20,6 +20,7 @@ mod input;
 mod msg;
 mod util;
 mod web;
+mod file;
 
 #[derive(Debug)]
 struct ReqwestError {
@@ -92,7 +93,7 @@ async fn _async_main() -> anyhow::Result<()> {
         let res = receive_msgs(rx).await;
         if res.is_err() {
             let err = res.unwrap_err();
-            eprintln!("RecErr: {}", err);
+            eprintln!("RecErr: {:?}", err);
             return Err(err);
         }
 
@@ -103,7 +104,7 @@ async fn _async_main() -> anyhow::Result<()> {
         let res = send_msgs().await;
         if res.is_err() {
             let err = res.unwrap_err();
-            eprintln!("SendErr: {}", err);
+            eprintln!("SendErr: {:?}", err);
             return Err(err);
         }
 
@@ -118,7 +119,7 @@ async fn _async_main() -> anyhow::Result<()> {
 
         if res.is_err() {
             let err = res.unwrap_err();
-            eprintln!("Rec: {}", err);
+            eprintln!("Rec: {:?}", err);
 
             return Err(anyhow!("Join Error idk"));
         }
@@ -126,7 +127,7 @@ async fn _async_main() -> anyhow::Result<()> {
         let res = res.unwrap();
         if res.is_err() {
             let err = res.unwrap_err();
-            eprintln!("Rec: {}", err);
+            eprintln!("Rec: {:?}", err);
 
             return Err(err);
         }
@@ -137,7 +138,7 @@ async fn _async_main() -> anyhow::Result<()> {
 
         if res.is_err() {
             let err = res.unwrap_err();
-            eprintln!("Rec: {}", err);
+            eprintln!("Rec: {:?}", err);
 
             return Err(anyhow!("Joinm Error idk"));
         }
@@ -145,7 +146,7 @@ async fn _async_main() -> anyhow::Result<()> {
         let res = res.unwrap();
         if res.is_err() {
             let err = res.unwrap_err();
-            eprintln!("Send: {}", err);
+            eprintln!("Send: {:?}", err);
 
             return Err(err);
         }

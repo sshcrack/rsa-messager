@@ -1,18 +1,12 @@
-use std::collections::VecDeque;
-
 use colored::Colorize;
 use tokio_tungstenite::tungstenite::Message;
 
-use crate::util::{
-    modes::Modes,
-    msg::{get_input, send_msg},
-    tools::{uuid_from_vec, uuid_to_name}, vec::{vec_to_decque, decque_to_vec},
-};
+use crate::{util::{
+    msg::{get_input, send_msg}, tools::uuid_to_name,
+}, msg::parsing::{file::{reply::FileQuestionReplyMsg, question_server::FileQuestionServerMsg}, types::WSMessage}};
 
 pub async fn on_file_question(data: &mut Vec<u8>) -> anyhow::Result<()> {
-    let sender = uuid_from_vec(data)?;
-    let filename = String::from_utf8(data.to_owned())?;
-
+    let FileQuestionServerMsg { filename,receiver, sender, uuid} = FileQuestionServerMsg::deserialize(data)?;
     let sender_name = uuid_to_name(sender).await?;
 
     let confirm_msg = format!(
@@ -44,17 +38,13 @@ pub async fn on_file_question(data: &mut Vec<u8>) -> anyhow::Result<()> {
         println!("{}", allowed.green());
     }
 
-    let accepted_vec: u8 = if accepted == true { 0 } else { 1 };
-
-    let mut merged: VecDeque<u8> = VecDeque::new();
-    let mut b_filename = vec_to_decque(filename.clone().as_bytes().to_vec());
-    let mut b_uuid = vec_to_decque(sender.as_bytes().to_vec());
-
-    merged.append(&mut b_uuid);
-    merged.push_back(accepted_vec);
-    merged.append(&mut b_filename);
-
-    let to_send = Modes::SendFileQuestionReply.get_send(&decque_to_vec(merged));
+    let to_send = FileQuestionReplyMsg {
+        accepted,
+        filename,
+        receiver,
+        sender,
+        uuid
+    }.serialize();
 
     send_msg(Message::binary(to_send)).await?;
     Ok(())
