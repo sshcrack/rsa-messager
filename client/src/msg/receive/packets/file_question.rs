@@ -1,9 +1,8 @@
 use colored::Colorize;
+use packets::{file::{question_server::FileQuestionServerMsg, reply::FileQuestionReplyMsg}, types::WSMessage};
 use tokio_tungstenite::tungstenite::Message;
 
-use crate::{util::{
-    msg::{get_input, send_msg}, tools::uuid_to_name,
-}, msg::parsing::{file::{reply::FileQuestionReplyMsg, question_server::FileQuestionServerMsg}, types::WSMessage}};
+use crate::util::{msg::{get_input, send_msg}, tools::uuid_to_name};
 
 pub async fn on_file_question(data: &mut Vec<u8>) -> anyhow::Result<()> {
     let FileQuestionServerMsg { filename,receiver, sender, uuid} = FileQuestionServerMsg::deserialize(data)?;

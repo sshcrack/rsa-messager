@@ -1,13 +1,13 @@
 use uuid::Uuid;
 
-struct FileRequest {
+pub struct FileRequest {
     filename: String,
     uuid: Uuid,
     receiver: Uuid,
     sender: Uuid
 }
 
-struct FileInfo {
+pub struct FileInfo {
     filename: String,
     uuid: Uuid,
     size: usize,

@@ -1,9 +1,10 @@
 use anyhow::anyhow;
+use packets::util::modes::Modes;
 use tokio::sync::mpsc::UnboundedSender;
 use uuid::Uuid;
 use warp::ws::Message;
 
-use crate::utils::{types::Users, modes::Modes, vec::{vec_to_decque, decque_to_vec}};
+use crate::utils::{types::Users, vec::{vec_to_decque, decque_to_vec}};
 
 use super::{name::on_name, pubkey::on_pubkey, to::on_to, uid::on_uid, file_question::on_file_question, file_question_reply::on_file_question_reply};
 
@@ -37,7 +38,7 @@ pub async fn user_message(my_id: Uuid, msg: Message, users: &Users, tx: &Unbound
     }
 
     if Modes::SendFileQuestion.is_indicator(&mode) {
-        return on_file_question(&msg, &my_id, &users).await;
+        return on_file_question(&msg, &users).await;
     }
 
     if Modes::SendFileQuestionReply.is_indicator(&mode) {

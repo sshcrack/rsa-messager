@@ -7,4 +7,6 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.68"
+log = "0.4.17"
+rsa = "0.8.1"
 uuid = "1.2.2"

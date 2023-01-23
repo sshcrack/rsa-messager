@@ -5,4 +5,3 @@ pub mod types;
 pub mod vec;
 pub mod arcs;
 pub mod msg;
-pub mod converter;

@@ -1,12 +1,14 @@
+use packets::{initialize::uid_reply::UidReplyMsg, types::WSMessage};
 use uuid::Uuid;
 use warp::ws::Message;
 
-use crate::utils::{modes::Modes, types::TXChannel, tools::send_msg};
+use crate::utils::{types::TXChannel, tools::send_msg};
 
 pub fn on_uid(my_id: &Uuid, tx: &TXChannel) -> anyhow::Result<()> {
-    let my_id_b = my_id.as_bytes().to_vec();
-    let packet = Modes::UidReply.get_send(&my_id_b);
+    let to_send = UidReplyMsg {
+        id: my_id.clone()
+    }.serialize();
 
-    send_msg(tx, Message::binary(packet))?;
+    send_msg(tx, Message::binary(to_send))?;
     Ok(())
 }

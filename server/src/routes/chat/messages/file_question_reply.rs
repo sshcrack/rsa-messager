@@ -1,10 +1,10 @@
-use uuid::Uuid;
+use packets::{file::reply::FileQuestionReplyMsg, types::WSMessage};
 use warp::ws::Message;
 
-use crate::{utils::{
+use crate::utils::{
     tools::send_msg_specific,
     types::Users,
-}, msg::parsing::{file::reply::FileQuestionReplyMsg, types::WSMessage}};
+};
 
 pub async fn on_file_question_reply(
     data: &Vec<u8>,

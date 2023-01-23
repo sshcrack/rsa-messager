@@ -1,15 +1,15 @@
 use log::debug;
+use packets::{file::question_client::FileQuestionClientMsg, file::question_server::FileQuestionServerMsg, types::WSMessage};
 use uuid::Uuid;
 use warp::ws::Message;
 
-use crate::{utils::{
+use crate::utils::{
     tools::send_msg_specific,
     types::Users,
-}, msg::parsing::{file::{question_client::FileQuestionClientMsg, question_server::FileQuestionServerMsg}, types::WSMessage}};
+};
 
 pub async fn on_file_question(
     data: &Vec<u8>,
-    curr_id: &Uuid,
     users: &Users
 ) -> anyhow::Result<()> {
     let FileQuestionClientMsg { filename, receiver, sender} = FileQuestionClientMsg::deserialize(&data)?;
