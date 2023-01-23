@@ -1,7 +1,8 @@
 use colored::Colorize;
+use packets::{initialize::name::NameMsg, types::WSMessage};
 use tokio_tungstenite::tungstenite::Message;
 
-use crate::util::{modes::Modes, msg::send_msg};
+use crate::util::msg::send_msg;
 
 pub async fn on_name(line: &str) -> anyhow::Result<()> {
     let new_name = line.split(" ");
@@ -12,9 +13,9 @@ pub async fn on_name(line: &str) -> anyhow::Result<()> {
         return Ok(())
     }
 
-    let name_byte = new_name.clone().into_bytes();
-    let to_send = Modes::Name.get_send(&name_byte);
-
+    let to_send = NameMsg {
+        name: new_name.clone()
+    }.serialize();
 
     send_msg(Message::Binary(to_send)).await?;
 

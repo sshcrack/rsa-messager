@@ -1,34 +1,24 @@
 use colored::Colorize;
-use packets::{file::{question_server::FileQuestionServerMsg, reply::FileQuestionReplyMsg}, types::WSMessage};
+use packets::{file::question::{index::FileQuestionMsg, reply::FileQuestionReplyMsg}, types::WSMessage};
+use pretty_bytes::converter::convert;
 use tokio_tungstenite::tungstenite::Message;
 
-use crate::util::{msg::{get_input, send_msg}, tools::uuid_to_name};
+use crate::util::{msg::send_msg, tools::{uuid_to_name, wait_confirm}};
 
 pub async fn on_file_question(data: &mut Vec<u8>) -> anyhow::Result<()> {
-    let FileQuestionServerMsg { filename,receiver, sender, uuid} = FileQuestionServerMsg::deserialize(data)?;
+    let FileQuestionMsg { filename,receiver, sender, uuid, size} = FileQuestionMsg::deserialize(data)?;
     let sender_name = uuid_to_name(sender).await?;
 
+    let size_str = convert(size as f64);
     let confirm_msg = format!(
-        "{} wants to send you the file '{}'. Accept? (y/n)",
+        "{} wants to send you the file '{}' of size {}. Accept? (y/n)",
         sender_name.green(),
-        filename.yellow()
+        filename.yellow(),
+        size_str.purple()
     );
     println!("{}", confirm_msg);
 
-    let accepted:bool;
-    loop {
-        let input = get_input().await?;
-
-        let input = input.to_lowercase();
-        if !input.eq("y") && !input.eq("n") {
-            eprintln!("You have to enter either y/n");
-            continue;
-        }
-
-        accepted = input.eq("y");
-        break;
-    }
-
+    let accepted = wait_confirm().await?;
     if !accepted {
         let denied = format!("You denied '{}' file request.", filename.bright_red());
         println!("{}", denied.red())
@@ -36,6 +26,7 @@ pub async fn on_file_question(data: &mut Vec<u8>) -> anyhow::Result<()> {
         let allowed = format!("Receiving '{}'{}", filename.bright_green(), "...".yellow());
         println!("{}", allowed.green());
     }
+
 
     let to_send = FileQuestionReplyMsg {
         accepted,

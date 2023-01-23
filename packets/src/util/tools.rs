@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use uuid::Uuid;
 
-use crate::consts::UUID_SIZE;
+use crate::consts::{UUID_SIZE, U64_SIZE};
 
 
 
@@ -32,4 +32,21 @@ pub fn uuid_from_vec(v: &mut Vec<u8>) -> anyhow::Result<Uuid> {
 
     let uuid = bytes_to_uuid(&uuid)?;
     return Ok(uuid);
+}
+
+pub fn u64_from_vec(v: &mut Vec<u8>) -> anyhow::Result<u64> {
+    if v.len() < U64_SIZE {
+        return Err(anyhow!(format!("Cannot parse u64 as length is too close ({})", v.len())));
+    }
+
+    let temp = v.splice(0..U64_SIZE, vec![]);
+    let temp = Vec::from_iter(temp);
+
+    let mut buff: [u8; U64_SIZE] = [0; U64_SIZE];
+    for i in 0..U64_SIZE {
+        buff[i] = temp.get(i).unwrap().to_owned();
+    }
+
+    let numb = u64::from_le_bytes(buff);
+    Ok(numb)
 }

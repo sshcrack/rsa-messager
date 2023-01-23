@@ -1,13 +1,16 @@
-use std::sync::{atomic::AtomicBool, Arc};
+use std::{sync::{atomic::AtomicBool, Arc}, collections::HashMap};
 
 use async_channel::{Receiver, Sender};
 use clap::{arg, command, Parser};
 use futures_util::{stream::{SplitSink, SplitStream}, lock::Mutex};
 use openssl::{pkey::Private, rsa::Rsa};
+use packets::file::types::FileInfo;
 use serde::{Deserialize, Serialize};
 use tokio::{net::TcpStream, sync::RwLock};
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, tungstenite::Message};
 use uuid::Uuid;
+
+use crate::file::uploader::index::Uploader;
 
 pub type Keypair = Arc<RwLock<Option<Rsa<Private>>>>;
 pub type BaseUrl = Arc<RwLock<String>>;
@@ -24,6 +27,9 @@ pub type RXChannel = SplitStream<WebSocketGeneral>;
 
 pub type ReceiveRX = Receiver<String>;
 pub type ReceiveTX = Sender<String>;
+
+pub type FileUploads = Arc<RwLock<HashMap<Uuid, Uploader>>>;
+pub type PendingUploads = Arc<RwLock<HashMap<Uuid, FileInfo>>>;
 
 #[derive(Serialize, Deserialize)]
 pub struct UserInfoBasic {

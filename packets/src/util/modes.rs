@@ -6,6 +6,7 @@ pub enum Modes {
     Name,
     WantUid,
     UidReply,
+    Error,
     // Initial Request from client to other client for asking them wether they want to receive the file or not
     SendFileQuestion,
     // Self-explanatory
@@ -13,7 +14,9 @@ pub enum Modes {
     // Message when other chunk of data is ready to be downloaded
     SendFileChunkReady,
     // Message when the receiver has downloaded the chunk and is ready for the next one
-    SendFileChunkDownloaded
+    SendFileChunkDownloaded,
+    // Sent from server to sending client, to retrieve file size etc
+    SendFileStartProcessing,
 }
 
 impl Modes {
@@ -25,10 +28,12 @@ impl Modes {
             Self::Name => 3,
             Self::WantUid => 4,
             Self::UidReply => 5,
-            Self::SendFileQuestion => 6,
-            Self::SendFileQuestionReply => 7,
-            Self::SendFileChunkReady => 8,
-            Self::SendFileChunkDownloaded => 9
+            Self::Error => 6,
+            Self::SendFileQuestion => 7,
+            Self::SendFileQuestionReply => 8,
+            Self::SendFileChunkReady => 9,
+            Self::SendFileChunkDownloaded => 10,
+            Self::SendFileStartProcessing => 11
         }
     }
 

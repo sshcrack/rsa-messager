@@ -6,7 +6,8 @@ use lazy_static::lazy_static;
 
 use super::types::*;
 
-pub const UUID_SIZE: usize = 16;
+pub const CONCURRENT_THREADS: u64 = 64;
+
 lazy_static! {
     pub static ref BASE_URL: BaseUrl = Arc::new(RwLock::new("".to_string()));
     pub static ref CURR_ID: UserId = UserId::default();
@@ -20,4 +21,8 @@ lazy_static! {
     pub static ref RECEIVE_RX: Arc<RwLock<Option<ReceiveRX>>> = Arc::new(RwLock::new(None));
 
     pub static ref RECEIVE_INPUT: ReceiveInput = Arc::new(AtomicBool::new(false));
+
+    pub static ref PENDING_UPLOADS: PendingUploads = PendingUploads::default();
+    pub static ref FILE_UPLOADS: FileUploads = FileUploads::default();
+
 }

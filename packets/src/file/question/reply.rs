@@ -1,9 +1,11 @@
 use std::collections::VecDeque;
 
+use log::trace;
 use uuid::Uuid;
 
 use crate::{types::WSMessage, util::{converter::{str_to_decque, pop_front_vec, uuid_to_decque}, vec::decque_to_vec, modes::Modes, tools::uuid_from_vec}};
 
+#[derive(Debug, Clone)]
 pub struct FileQuestionReplyMsg {
     pub filename: String,
     pub uuid: Uuid,
@@ -20,7 +22,7 @@ impl WSMessage for FileQuestionReplyMsg {
         let mut b_uuid = uuid_to_decque(&self.uuid);
         let mut b_receiver = uuid_to_decque(&self.receiver);
         let mut b_sender = uuid_to_decque(&self.sender);
-        let b_accepted: u8 = if self.accepted == true { 0 } else { 1 };
+        let b_accepted: u8 = if self.accepted == true { 1 } else { 0 };
 
         merged.append(&mut b_uuid);
         merged.append(&mut b_receiver);
@@ -42,12 +44,16 @@ impl WSMessage for FileQuestionReplyMsg {
         let filename = String::from_utf8(data)?;
 
         let accepted = accepted == 1;
-        return Ok(FileQuestionReplyMsg {
+
+        let msg = FileQuestionReplyMsg {
             filename,
             uuid,
             sender,
             receiver,
             accepted
-        });
+        };
+
+        trace!("FileQuestionReplyMsg parsed: {:#?}", msg);
+        return Ok(msg);
     }
 }

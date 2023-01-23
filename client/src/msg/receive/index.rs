@@ -2,14 +2,16 @@ use std::collections::VecDeque;
 
 use anyhow::anyhow;
 use futures_util::StreamExt;
+use packets::util::modes::Modes;
+use packets::util::vec::decque_to_vec;
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::util::types::*;
-use crate::util::modes::Modes;
-use crate::util::vec::decque_to_vec;
 
-use super::packets::file_question::on_file_question;
-use super::packets::file_question_reply::on_file_question_reply;
+use super::packets::error::on_error;
+use super::packets::file::file_question::on_file_question;
+use super::packets::file::file_question_reply::on_file_question_reply;
+use super::packets::file::start_processing::on_start_processing;
 use super::packets::{from::on_from, uid::on_uid};
 
 pub async fn receive_msgs(
@@ -64,6 +66,16 @@ pub async fn handle(
 
     if Modes::UidReply.is_indicator(&mode) {
         on_uid(&mut data).await?;
+        return Ok(());
+    }
+
+    if Modes::Error.is_indicator(&mode) {
+        on_error(&mut data).await?;
+        return Ok(());
+    }
+
+    if Modes::SendFileStartProcessing.is_indicator(&mode) {
+        on_start_processing(&mut data).await?;
         return Ok(());
     }
 

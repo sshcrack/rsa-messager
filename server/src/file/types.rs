@@ -1,8 +1,10 @@
-use std::sync::Arc;
+use std::{sync::Arc, collections::HashMap};
+use packets::file::types::FileInfo;
 
 use tokio::sync::RwLock;
+use uuid::Uuid;
 
-use super::info::{FileRequest, FileInfo};
+use super::controller::index::Controller;
 
-pub type FileRequestList = Arc<RwLock<Vec<FileRequest>>>;
-pub type FileInfoList = Arc<RwLock<Vec<FileInfo>>>;
+pub type FileControllers = Arc<RwLock<HashMap<Uuid, Controller>>>;
+pub type PendingUploads = Arc<RwLock<HashMap<Uuid, FileInfo>>>;

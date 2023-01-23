@@ -11,6 +11,10 @@ mod file;
 
 #[tokio::main]
 async fn main() {
+    if cfg!(debug_assertions) {
+        std::env::set_var("RUST_LOG", "server,tungestenit,packets");
+    }
+
     pretty_env_logger::init();
 
     // Keep track of all connected users, key is usize, value

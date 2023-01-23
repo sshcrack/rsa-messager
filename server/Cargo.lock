@@ -926,6 +926,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "readonly"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d78725e4e53781014168628ef49b2dc2fc6ae8d01a08769a5064685d34ee116c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1088,10 +1099,10 @@ dependencies = [
  "log",
  "packets",
  "pretty_env_logger",
+ "readonly",
  "rsa",
  "serde",
  "serde_json",
- "string-error",
  "tokio",
  "tokio-stream",
  "uuid",
@@ -1179,12 +1190,6 @@ dependencies = [
  "base64ct",
  "der",
 ]
-
-[[package]]
-name = "string-error"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "439558b73299d7afdf52c36399c3c812cca10fe5ca08429f38815df5bacf3ef7"
 
 [[package]]
 name = "strsim"

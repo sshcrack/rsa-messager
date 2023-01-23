@@ -25,3 +25,6 @@ lazy_static = "1.4.0"
 futures-either = "0.1.0"
 async-channel = "1.8.0"
 packets = { path = "../packets" }
+log = "0.4.17"
+pretty_env_logger = "0.4.0"
+pretty-bytes = "0.2.2"

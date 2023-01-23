@@ -1,16 +1,17 @@
 use std::sync::atomic::Ordering;
 
 use colored::Colorize;
+use packets::{initialize::uid_reply::UidReplyMsg, types::WSMessage};
 
 use crate::{
     input::receiver::select_receiver,
-    util::{consts::{RECEIVER, SEND_DISABLED, CURR_ID}, tools::uuid_from_vec},
+    util::consts::{RECEIVER, SEND_DISABLED, CURR_ID},
 };
 
 pub async fn on_uid(
     data: &mut Vec<u8>
 ) -> anyhow::Result<()> {
-    let uuid = uuid_from_vec(data)?;
+    let UidReplyMsg { uuid } = UidReplyMsg::deserialize(data)?;
 
     println!("Current id set to {}", uuid);
     let mut state = CURR_ID.write().await;
