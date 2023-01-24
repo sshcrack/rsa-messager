@@ -14,8 +14,10 @@ pub async fn on_file_question_reply(data: &Vec<u8>, users: &Users) -> anyhow::Re
     let msg = FileQuestionReplyMsg::deserialize(&data)?;
 
 
+    let file = get_pending_file(msg.uuid).await?;
+
     let to_send = msg.serialize();
-    send_msg_specific(msg.receiver, users, Message::binary(to_send)).await?;
+    send_msg_specific(file.receiver, users, Message::binary(to_send)).await?;
 
     if !msg.accepted {
         trace!("Deleted rejected file with id {}", msg.uuid);

@@ -1,16 +1,19 @@
 use colored::Colorize;
-use packets::{file::question::reply::FileQuestionReplyMsg, types::WSMessage};
+use packets::{file::{question::reply::FileQuestionReplyMsg, types::FileInfo}, types::WSMessage};
 
-use crate::util::tools::uuid_to_name;
+use crate::{util::tools::uuid_to_name, file::tools::get_pending_file};
 
 pub async fn on_file_question_reply(data: &mut Vec<u8>) -> anyhow::Result<()> {
-    let msg = FileQuestionReplyMsg::deserialize(data)?;
+    let FileQuestionReplyMsg { accepted, uuid} = FileQuestionReplyMsg::deserialize(data)?;
+    let file = get_pending_file(uuid).await;
 
-    let sender = msg.sender;
+    if file.is_err() {
+        eprintln!("{}", format!("Could not receive file. Invalid UUID: {}", uuid).red());
+        return Ok(());
+    }
+
+    let FileInfo { sender, filename,.. } = file.unwrap();
     let sender_name = uuid_to_name(sender).await?;
-
-    let filename = msg.filename;
-    let accepted = msg.accepted;
 
     if accepted {
         println!("{}", format!(

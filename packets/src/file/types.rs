@@ -12,5 +12,6 @@ pub struct FileInfo {
     pub filename: String,
     pub size: u64,
     pub receiver: Uuid,
-    pub sender: Uuid
+    pub sender: Uuid,
+    pub secret: u64
 }

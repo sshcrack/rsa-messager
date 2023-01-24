@@ -1,21 +1,18 @@
 use std::io::stdin;
 use std::sync::atomic::Ordering;
 
-use openssl::rsa::Rsa;
 use packets::communication::to::ToMsg;
 use packets::initialize::pubkey::PubkeyMsg;
 use packets::types::WSMessage;
 use packets::util::modes::Modes;
 use tokio_tungstenite::tungstenite::Message;
 
+use crate::encryption::rsa::get_pubkey_from_rec;
 use crate::msg::send::actions::index::on_command;
 use crate::util::arcs::get_curr_keypair;
 use crate::util::consts::{SEND_DISABLED, RECEIVER, RECEIVE_INPUT, RECEIVE_TX};
 use crate::util::msg::{send_msg, print_from_msg};
-use crate::{
-    encryption::rsa::encrypt,
-    web::user_info::get_user_info,
-};
+use crate::encryption::rsa::encrypt;
 pub async fn send_msgs() -> anyhow::Result<()> {
     let keypair = get_curr_keypair().await?;
 
@@ -76,18 +73,9 @@ pub async fn send_msgs() -> anyhow::Result<()> {
 
         let rec_got = rec_got.clone().unwrap();
 
-        let info = get_user_info(&rec_got).await?;
-        let pubkey_pem = info.public_key;
 
-        if pubkey_pem.is_none() {
-            println!("Could not get pubkey of receiver.");
-            continue;
-        }
-
-        let pubkey_pem = pubkey_pem.unwrap();
-        let key = Rsa::public_key_from_pem(pubkey_pem.as_bytes())?;
-
-        let encrypted = encrypt(key, &line)?;
+        let key = get_pubkey_from_rec(&rec_got).await?;
+        let encrypted = encrypt(key, &line.as_bytes().to_vec())?;
 
         print_from_msg("you", &line);
 

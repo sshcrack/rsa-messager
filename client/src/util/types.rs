@@ -29,7 +29,7 @@ pub type ReceiveRX = Receiver<String>;
 pub type ReceiveTX = Sender<String>;
 
 pub type FileUploads = Arc<RwLock<HashMap<Uuid, Uploader>>>;
-pub type PendingUploads = Arc<RwLock<HashMap<Uuid, FileInfo>>>;
+pub type PendingFiles = Arc<RwLock<HashMap<Uuid, FileInfo>>>;
 
 #[derive(Serialize, Deserialize)]
 pub struct UserInfoBasic {

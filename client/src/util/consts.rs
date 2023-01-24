@@ -22,7 +22,7 @@ lazy_static! {
 
     pub static ref RECEIVE_INPUT: ReceiveInput = Arc::new(AtomicBool::new(false));
 
-    pub static ref PENDING_UPLOADS: PendingUploads = PendingUploads::default();
+    pub static ref PENDING_FILES: PendingFiles = PendingFiles::default();
     pub static ref FILE_UPLOADS: FileUploads = FileUploads::default();
 
 }

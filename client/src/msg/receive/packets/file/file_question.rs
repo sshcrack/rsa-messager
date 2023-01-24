@@ -1,12 +1,29 @@
 use colored::Colorize;
-use packets::{file::question::{index::FileQuestionMsg, reply::FileQuestionReplyMsg}, types::WSMessage};
+use packets::{
+    file::{
+        question::{index::FileQuestionMsg, reply::FileQuestionReplyMsg},
+        types::FileInfo,
+    },
+    types::WSMessage,
+};
 use pretty_bytes::converter::convert;
 use tokio_tungstenite::tungstenite::Message;
 
-use crate::util::{msg::send_msg, tools::{uuid_to_name, wait_confirm}};
+use crate::util::{
+    consts::PENDING_FILES,
+    msg::send_msg,
+    tools::{uuid_to_name, wait_confirm},
+};
 
 pub async fn on_file_question(data: &mut Vec<u8>) -> anyhow::Result<()> {
-    let FileQuestionMsg { filename,receiver, sender, uuid, size} = FileQuestionMsg::deserialize(data)?;
+    let FileQuestionMsg {
+        filename,
+        receiver,
+        sender,
+        uuid,
+        size,
+        secret,
+    } = FileQuestionMsg::deserialize(data)?;
     let sender_name = uuid_to_name(sender).await?;
 
     let size_str = convert(size as f64);
@@ -25,17 +42,22 @@ pub async fn on_file_question(data: &mut Vec<u8>) -> anyhow::Result<()> {
     } else {
         let allowed = format!("Receiving '{}'{}", filename.bright_green(), "...".yellow());
         println!("{}", allowed.green());
+
+        let info = FileInfo {
+            filename,
+            receiver,
+            sender,
+            size,
+            secret,
+        };
+
+        let mut state = PENDING_FILES.write().await;
+        state.insert(uuid, info);
+
+        drop(state);
     }
 
-
-    let to_send = FileQuestionReplyMsg {
-        accepted,
-        filename,
-        receiver,
-        sender,
-        uuid
-    }.serialize();
-
+    let to_send = FileQuestionReplyMsg { accepted, uuid }.serialize();
     send_msg(Message::binary(to_send)).await?;
     Ok(())
 }

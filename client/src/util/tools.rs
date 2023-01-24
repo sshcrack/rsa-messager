@@ -31,3 +31,13 @@ pub async fn wait_confirm() -> anyhow::Result<bool> {
 
     return Ok(accepted);
 }
+
+pub fn get_avg(vec: &Vec<f32>) -> anyhow::Result<f32> {
+    let mut sum = 0 as f32;
+    for e in vec {
+        sum += e;
+    }
+
+    let res = sum / (vec.len() as f32);
+    return Ok(res);
+}

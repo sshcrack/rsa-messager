@@ -19,3 +19,5 @@ client/frontend/.env.production.local
 client/frontend/npm-debug.log*
 client/frontend/yarn-debug.log*
 client/frontend/yarn-error.log*
+client/hi
+client/t
