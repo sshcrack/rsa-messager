@@ -2,7 +2,7 @@ use anyhow::anyhow;
 use openssl::{rsa::Rsa, pkey::Private};
 use uuid::Uuid;
 
-use super::consts::{RECEIVER, CURR_ID, KEYPAIR, TX_CHANNEL};
+use super::consts::{RECEIVER, CURR_ID, KEYPAIR, TX_CHANNEL, BASE_URL, USE_TLS};
 
 
 pub async fn get_curr_keypair() -> anyhow::Result<Rsa<Private>> {
@@ -40,4 +40,22 @@ pub async fn get_receiver() -> anyhow::Result<Uuid> {
     }
 
     return Ok(curr_id.unwrap());
+}
+
+
+pub async fn get_base_url() -> String {
+    let state = BASE_URL.read().await;
+    let base_url = state.clone();
+
+    drop(state);
+
+    return base_url;
+}
+
+
+pub async fn use_tls() -> bool {
+    let state = USE_TLS.read().await;
+    let out = state.clone();
+
+    return out;
 }

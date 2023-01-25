@@ -1,15 +1,13 @@
 use std::{collections::HashMap, str::FromStr};
 
+use lazy_static::__Deref;
 use uuid::Uuid;
 use warp::hyper::Response;
 
-use crate::utils::types::{Users, UserInfoBasic};
+use crate::{utils::types::{UserInfoBasic}, file::consts::USERS};
 
 
-pub async fn on_info(
-    users: Users,
-    p: HashMap<String, String>,
-) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+pub async fn on_info(p: HashMap<String, String>,) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     let k = p.get("id");
     if k.is_none() {
         return Ok(Box::new(
@@ -27,10 +25,11 @@ pub async fn on_info(
 
     let uuid = uuid.unwrap();
 
-    let state = users.write().await;
-    let info = state.get(&uuid);
+    let state = USERS.read().await;
+    let info = state.get(&uuid).clone();
 
     if info.is_none() {
+        drop(state);
         return Ok(Box::new(
             Response::builder().body(String::from("User info is null")),
         ));
@@ -45,5 +44,6 @@ pub async fn on_info(
         public_key: pubkey.to_owned(),
     };
 
+    drop(state);
     return Ok(Box::new(warp::reply::json(&basic)));
 }

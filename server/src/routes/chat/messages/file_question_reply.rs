@@ -7,17 +7,17 @@ use warp::ws::Message;
 
 use crate::{
     file::{consts::{PENDING_UPLOADS, UPLOADING_FILES}, tools::get_pending_file, controller::index::Controller},
-    utils::{tools::send_msg_specific, types::Users},
+    utils::tools::send_msg_specific,
 };
 
-pub async fn on_file_question_reply(data: &Vec<u8>, users: &Users) -> anyhow::Result<()> {
+pub async fn on_file_question_reply(data: &Vec<u8>) -> anyhow::Result<()> {
     let msg = FileQuestionReplyMsg::deserialize(&data)?;
 
 
     let file = get_pending_file(msg.uuid).await?;
 
     let to_send = msg.serialize();
-    send_msg_specific(file.receiver, users, Message::binary(to_send)).await?;
+    send_msg_specific(file.receiver, Message::binary(to_send)).await?;
 
     if !msg.accepted {
         trace!("Deleted rejected file with id {}", msg.uuid);
@@ -36,7 +36,7 @@ pub async fn on_file_question_reply(data: &Vec<u8>, users: &Users) -> anyhow::Re
         drop(state);
 
         trace!("Adding controller to uploading files {}", uuid);
-        let controller = Controller::new(&uuid, &users, file).await?;
+        let controller = Controller::new(&uuid, file).await?;
 
         let mut state = UPLOADING_FILES.write().await;
         state.insert(uuid, controller);

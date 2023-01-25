@@ -4,14 +4,10 @@ use log::trace;
 use packets::{file::{question::{index::FileQuestionMsg}, types::FileInfo}, types::ByteMessage, communication::error::ErrorMsg};
 use warp::ws::Message;
 
-use crate::{utils::{
-    tools::send_msg_specific,
-    types::Users,
-}, file::consts::PENDING_UPLOADS};
+use crate::{utils::tools::send_msg_specific, file::consts::PENDING_UPLOADS};
 
 pub async fn on_file_question(
-    data: &Vec<u8>,
-    users: &Users
+    data: &Vec<u8>
 ) -> anyhow::Result<()> {
     let msg = FileQuestionMsg::deserialize(&data)?;
 
@@ -28,7 +24,7 @@ pub async fn on_file_question(
             error: "Invalid filename".to_string()
         }.serialize();
 
-        send_msg_specific(sender, users, Message::binary(err)).await?;
+        send_msg_specific(sender, Message::binary(err)).await?;
         return Ok(());
     }
 
@@ -40,7 +36,7 @@ pub async fn on_file_question(
             error: "Invalid OSString".to_string()
         }.serialize();
 
-        send_msg_specific(sender, users, Message::binary(err)).await?;
+        send_msg_specific(sender, Message::binary(err)).await?;
         return Ok(());
     }
 
@@ -52,7 +48,7 @@ pub async fn on_file_question(
         trace!("Duplicate uuid of file.");
         let err = ErrorMsg { error: "Invalid uuid of file. The same uuid is already stored.".to_string() }.serialize();
 
-        send_msg_specific(sender, users, Message::binary(err)).await?;
+        send_msg_specific(sender, Message::binary(err)).await?;
         return Ok(());
     }
 
@@ -60,8 +56,7 @@ pub async fn on_file_question(
         filename: msg.filename.clone(),
         receiver: msg.receiver.clone(),
         sender,
-        size: msg.size,
-        secret: msg.secret
+        size: msg.size
     };
 
     trace!("Storing file info {:#?}", info);
@@ -72,6 +67,6 @@ pub async fn on_file_question(
     drop(state);
 
     let to_send = msg.serialize();
-    send_msg_specific(msg.receiver, users, Message::binary(to_send)).await?;
+    send_msg_specific(msg.receiver, Message::binary(to_send)).await?;
     Ok(())
 }

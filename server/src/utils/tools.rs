@@ -2,7 +2,9 @@ use anyhow::anyhow;
 use uuid::Uuid;
 use warp::ws::Message;
 
-use super::types::{TXChannel, Users};
+use crate::file::consts::USERS;
+
+use super::types::TXChannel;
 
 pub fn send_msg(tx: &TXChannel, msg: Message) -> anyhow::Result<()> {
     let e = tx.send(msg);
@@ -15,10 +17,10 @@ pub fn send_msg(tx: &TXChannel, msg: Message) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub async fn send_msg_specific(id: Uuid, users: &Users, msg: Message) -> anyhow::Result<()> {
+pub async fn send_msg_specific(id: Uuid, msg: Message) -> anyhow::Result<()> {
     let mut found = false;
 
-    for (&uid, info) in users.read().await.iter() {
+    for (&uid, info) in USERS.read().await.iter() {
         if id.to_string().eq(&uid.to_string()) {
             let tx = &info.sender;
 

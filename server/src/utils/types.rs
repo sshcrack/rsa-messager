@@ -21,7 +21,7 @@ pub struct UserInfo {
 }
 
 pub type Users = Arc<RwLock<HashMap<Uuid, UserInfo>>>;
-pub type UsersList = Arc<Mutex<Vec<Uuid>>>;
+pub type UsersList = Arc<RwLock<Vec<Uuid>>>;
 
 pub type TXChannel = UnboundedSender<Message>;
 

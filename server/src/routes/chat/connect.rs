@@ -5,13 +5,13 @@ use tokio_stream::wrappers::UnboundedReceiverStream;
 use uuid::Uuid;
 use warp::ws::WebSocket;
 
-use crate::{utils::types::{Users, UsersList, UserInfo}, routes::chat::{disconnect::user_disconnected, messages::index::user_message}};
+use crate::{utils::types::{UserInfo}, routes::chat::{disconnect::user_disconnected, messages::index::user_message}, file::consts::{USERS_LIST, USERS}};
 
 
-pub async fn user_connected(ws: WebSocket, users: Users, users_list: UsersList) {
+pub async fn user_connected(ws: WebSocket) {
     // Use a counter to assign a new unique ID for this user.
     let user_id = Uuid::new_v4();
-    let mut list_lock = users_list.lock().await;
+    let mut list_lock = USERS_LIST.write().await;
     list_lock.push(user_id);
 
     drop(list_lock);
@@ -38,7 +38,7 @@ pub async fn user_connected(ws: WebSocket, users: Users, users_list: UsersList) 
     });
 
     // Save the sender in our list of connected users.
-    users.write().await.insert(
+    USERS.write().await.insert(
         user_id,
         UserInfo {
             sender: tx.clone(),
@@ -60,7 +60,7 @@ pub async fn user_connected(ws: WebSocket, users: Users, users_list: UsersList) 
                 break;
             }
         };
-        let e = user_message(user_id, msg, &users, &tx).await;
+        let e = user_message(user_id, msg, &tx).await;
         if e.is_err() {
             let x = e.unwrap_err();
             eprintln!("WebsocketErr: {:#?}", x);
@@ -69,5 +69,5 @@ pub async fn user_connected(ws: WebSocket, users: Users, users_list: UsersList) 
 
     // user_ws_rx stream will keep processing as long as the user stays
     // connected. Once they disconnect, then...
-    user_disconnected(user_id, &users, &users_list).await;
+    user_disconnected(user_id).await;
 }

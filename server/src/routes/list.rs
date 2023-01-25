@@ -1,8 +1,8 @@
-use crate::utils::types::UsersList;
+use crate::file::consts::USERS_LIST;
 
 
-pub async fn on_list(users_list: UsersList) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
-    let current = users_list.lock().await;
+pub async fn on_list() -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+    let current = USERS_LIST.read().await;
     let vec = current.to_vec();
     let mut vec_str: Vec<String> = Vec::new();
 

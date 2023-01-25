@@ -12,8 +12,9 @@ use util::consts::{RECEIVE_TX, RECEIVE_RX};
 use crate::encryption::rsa::generate;
 use crate::msg::receive::index::receive_msgs;
 use crate::msg::send::index::send_msgs;
-use crate::util::consts::{BASE_URL, KEYPAIR, TX_CHANNEL};
+use crate::util::consts::{BASE_URL, KEYPAIR, TX_CHANNEL, USE_TLS};
 use crate::util::types::{Args};
+use crate::web::prefix::get_ws_protocol;
 
 mod encryption;
 mod input;
@@ -68,7 +69,14 @@ async fn _async_main() -> anyhow::Result<()> {
     initialize_consts().await;
 
     let args = Args::parse();
+
     let base_url = args.address.unwrap_or("localhost:3030".to_string());
+
+    let mut state = USE_TLS.write().await;
+    *state = args.secure.unwrap_or(false);
+
+    drop(state);
+
 
     let mut state = BASE_URL.write().await;
     *state = base_url.clone();
@@ -83,7 +91,8 @@ async fn _async_main() -> anyhow::Result<()> {
 
     drop(state);
 
-    let ws_url = format!("ws://{}/chat", base_url);
+    let ws_protocol = get_ws_protocol().await;
+    let ws_url = format!("{}//{}/chat", ws_protocol, base_url);
 
     println!("Connecting to {} ...", ws_url.to_string());
 

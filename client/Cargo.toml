@@ -11,7 +11,7 @@ futures-util = { version = "0.3.25", default-features = false, features = ["sink
 tokio-stream = "0.1.11"
 url = "2.2.2"
 tokio-tungstenite = { version = "0.18.0", features = ["native-tls"]}
-reqwest = "0.11.13"
+reqwest = { version = "0.11.13", features = ["stream"] }
 anyhow = "1.0.68"
 serde_json = "1.0.91"
 inquire = "0.5.3"
@@ -22,10 +22,14 @@ colored = "2.0.0"
 uuid = { version = "1.2.2", features = ["v4", "fast-rng", "macro-diagnostics"] }
 clap = { version = "4.1.1", features = ["derive"] }
 lazy_static = "1.4.0"
-futures-either = "0.1.0"
 async-channel = "1.8.0"
 packets = { path = "../packets" }
 log = "0.4.17"
 pretty_env_logger = "0.4.0"
 pretty-bytes = "0.2.2"
 crossbeam-channel = "0.5.6"
+tokio-util = "0.7.4"
+indicatif = "0.17.3"
+async-stream = "0.3.3"
+futures-core = "0.3.25"
+bytes = "1.3.0"

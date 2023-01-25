@@ -14,6 +14,7 @@ use crate::file::uploader::index::Uploader;
 
 pub type Keypair = Arc<RwLock<Option<Rsa<Private>>>>;
 pub type BaseUrl = Arc<RwLock<String>>;
+pub type UseTls = Arc<RwLock<bool>>;
 pub type SendDisabled = Arc<AtomicBool>;
 pub type ReceiveInput = Arc<AtomicBool>;
 pub type UserId = Arc<RwLock<Option<Uuid>>>;
@@ -45,11 +46,15 @@ pub struct Args {
     #[arg(long, short = 'r')]
     pub receiver: Option<String>,
 
-    /// Number of times to greet
+    /// The address this client should connect to
     #[arg(short = 'a', long)]
     pub address: Option<String>,
 
-    /// Number of times to greet
+    /// Weither the client should use http:// and wss:// (tls)
+    #[arg(short = 's', long)]
+    pub secure: Option<bool>,
+
+    /// Name of the client
     #[arg(short = 'n', long)]
     pub name: Option<String>,
 

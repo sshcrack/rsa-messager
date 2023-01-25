@@ -10,6 +10,7 @@ pub const CONCURRENT_THREADS: u64 = 64;
 
 lazy_static! {
     pub static ref BASE_URL: BaseUrl = Arc::new(RwLock::new("".to_string()));
+    pub static ref USE_TLS: UseTls = Arc::new(RwLock::new(false));
     pub static ref CURR_ID: UserId = UserId::default();
     pub static ref SEND_DISABLED: SendDisabled = Arc::new(AtomicBool::new(true));
     pub static ref RECEIVER: ReceiverArc = ReceiverArc::new(RwLock::new(None));

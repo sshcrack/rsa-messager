@@ -3,23 +3,20 @@ use packets::{file::{types::FileInfo, processing::{start::FileStartProcessing, t
 use uuid::Uuid;
 use warp::ws::Message;
 
-use crate::utils::{tools::send_msg_specific, types::Users};
+use crate::utils::tools::send_msg_specific;
 
 #[readonly::make]
 pub struct Controller {
     #[readonly]
     pub file: FileInfo,
 
-    uuid: Uuid,
-    users: Users
-
+    uuid: Uuid
 }
 
 impl Controller {
-    pub async fn new(id: &Uuid, users: &Users, file: FileInfo) -> anyhow::Result<Self> {
+    pub async fn new(id: &Uuid, file: FileInfo) -> anyhow::Result<Self> {
         let threads = get_max_threads(file.size);
         let id = id.clone();
-        let users = users.clone();
 
         trace!("Sending start processing packet...");
         let to_send = FileStartProcessing {
@@ -27,13 +24,12 @@ impl Controller {
             threads
         }.serialize();
 
-        send_msg_specific(file.sender, &users, Message::binary(to_send)).await?;
+        send_msg_specific(file.sender, Message::binary(to_send)).await?;
 
         trace!("Returning");
         return Ok(Controller {
             file,
-            uuid: id,
-            users
+            uuid: id
         });
     }
 }

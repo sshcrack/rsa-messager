@@ -8,7 +8,7 @@ use crate::utils::{types::Users, vec::{vec_to_decque, decque_to_vec}};
 
 use super::{name::on_name, pubkey::on_pubkey, to::on_to, uid::on_uid, file_question::on_file_question, file_question_reply::on_file_question_reply};
 
-pub async fn user_message(my_id: Uuid, msg: Message, users: &Users, tx: &UnboundedSender<Message>) -> anyhow::Result<()> {
+pub async fn user_message(my_id: Uuid, msg: Message, tx: &UnboundedSender<Message>) -> anyhow::Result<()> {
     let msg = msg.into_bytes();
     let mut msg = vec_to_decque(msg);
     let mode = msg.pop_front();
@@ -26,23 +26,23 @@ pub async fn user_message(my_id: Uuid, msg: Message, users: &Users, tx: &Unbound
     }
 
     if Modes::To.is_indicator(&mode) {
-        return on_to(msg, &my_id, &users).await;
+        return on_to(msg, &my_id).await;
     }
 
     if Modes::SetPubkey.is_indicator(&mode) {
-        return on_pubkey(&msg, &my_id, &users).await;
+        return on_pubkey(&msg, &my_id).await;
     }
 
     if Modes::Name.is_indicator(&mode) {
-        return on_name(&msg, &my_id, &users).await;
+        return on_name(&msg, &my_id).await;
     }
 
     if Modes::SendFileQuestion.is_indicator(&mode) {
-        return on_file_question(&msg, &users).await;
+        return on_file_question(&msg).await;
     }
 
     if Modes::SendFileQuestionReply.is_indicator(&mode) {
-        return on_file_question_reply(&msg,  &users).await;
+        return on_file_question_reply(&msg).await;
     }
 
     Err(anyhow!("Invalid packet mode."))

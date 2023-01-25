@@ -30,11 +30,6 @@ pub async fn on_send(line: &str) -> anyhow::Result<()> {
 
 
     let curr_id = get_curr_id().await?;
-
-    let mut secret_bytes = [0; U64_SIZE];
-    rand::rand_bytes(&mut secret_bytes)?;
-
-    let secret = u64::from_le_bytes(secret_bytes);
     let uuid = Uuid::new_v4();
 
     let to_send = FileQuestionMsg {
@@ -42,8 +37,7 @@ pub async fn on_send(line: &str) -> anyhow::Result<()> {
         sender: curr_id,
         receiver,
         uuid,
-        size,
-        secret
+        size
     }.serialize();
 
     send_msg(Message::Binary(to_send)).await?;
@@ -54,8 +48,7 @@ pub async fn on_send(line: &str) -> anyhow::Result<()> {
         filename,
         sender: curr_id,
         receiver,
-        size,
-        secret
+        size
     };
 
     trace!("Storing file info {:#?}", info);

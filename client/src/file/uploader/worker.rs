@@ -5,7 +5,7 @@ use crossbeam_channel::{Receiver, Sender};
 use log::{debug, trace, warn};
 use openssl::{pkey::Public, rsa::Rsa};
 use packets::{
-    consts::CHUNK_SIZE,
+    consts::{CHUNK_SIZE, ONE_MB_SIZE},
     file::{processing::tools::get_max_threads, types::FileInfo, chunk::index::{ChunkByteMessage, ChunkMsg}}, encryption::sign::get_signature,
 };
 use tokio::{
@@ -14,18 +14,15 @@ use tokio::{
     sync::RwLock,
     task::JoinHandle,
 };
-use tokio_tungstenite::tungstenite::Message;
 use uuid::Uuid;
 
-use crate::{encryption::rsa::encrypt, util::{arcs::get_curr_keypair, consts::TX_CHANNEL, msg::send_msg}};
+use crate::{encryption::rsa::encrypt, util::arcs::{get_curr_keypair, get_base_url}, web::{prefix::get_web_protocol, progress::upload_file}};
 
 pub type ProgressChannel = Receiver<f32>;
 pub type ArcProgressChannel = Arc<RwLock<ProgressChannel>>;
 
 pub type ProgressTX = Sender<f32>;
 pub type ArcProgressTX = Arc<RwLock<ProgressTX>>;
-
-pub const ONE_MB: u64 = 1000 * 1000; // One MB
 
 #[derive(Debug)]
 pub struct UploadWorker {
@@ -135,14 +132,14 @@ impl UploadWorker {
                 trace!("Reading file with chunk size {} (i: {})", chunk_size, i);
                 let mut bytes_read = 0;
                 while bytes_read < chunk_size {
-                    let to_read = std::cmp::min(ONE_MB, chunk_size_u64);
+                    let to_read = std::cmp::min(ONE_MB_SIZE, chunk_size_u64);
                     let to_read = usize::try_from(to_read)?;
                     let mut small_chunk = Vec::with_capacity(to_read);
 
                     buf.read_exact(&mut small_chunk).await?;
                     chunk.append(&mut small_chunk);
 
-                    let percentage = (bytes_read as f32) / (chunk_size as f32) * 0.75;
+                    let percentage = (bytes_read as f32) / (chunk_size as f32) * 0.5;
                     tx.send(percentage)?;
 
                     bytes_read += to_read;
@@ -152,12 +149,23 @@ impl UploadWorker {
                 let keypair = get_curr_keypair().await?;
                 let signature = get_signature(&encrypted, &keypair)?;
 
-                send_msg(Message::binary(ChunkMsg {
+                let base_url = get_base_url().await;
+                let http_protocol = get_web_protocol().await;
+
+                let url = format!("{}//{}/file/upload", http_protocol, base_url);
+                let client = reqwest::Client::new();
+
+                let body = ChunkMsg {
                     signature,
                     encrypted,
                     uuid
-                }.serialize()));
+                }.serialize();
 
+                trace!("Uploading chunk {}...", i);
+                let (tx, rx) = crossbeam_channel::unbounded();
+
+
+                upload_file(&client, url, body).await?;
                 tx.send(1 as f32)?;
                 debug!("Worker {} of file {} done.", i, uuid);
                 Ok(())
