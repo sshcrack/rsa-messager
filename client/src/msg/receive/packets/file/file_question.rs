@@ -4,7 +4,7 @@ use packets::{
         question::{index::FileQuestionMsg, reply::FileQuestionReplyMsg},
         types::FileInfo,
     },
-    types::WSMessage,
+    types::ByteMessage,
 };
 use pretty_bytes::converter::convert;
 use tokio_tungstenite::tungstenite::Message;
@@ -21,8 +21,7 @@ pub async fn on_file_question(data: &mut Vec<u8>) -> anyhow::Result<()> {
         receiver,
         sender,
         uuid,
-        size,
-        secret,
+        size
     } = FileQuestionMsg::deserialize(data)?;
     let sender_name = uuid_to_name(sender).await?;
 
@@ -47,8 +46,7 @@ pub async fn on_file_question(data: &mut Vec<u8>) -> anyhow::Result<()> {
             filename,
             receiver,
             sender,
-            size,
-            secret,
+            size
         };
 
         let mut state = PENDING_FILES.write().await;

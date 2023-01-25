@@ -1,5 +1,5 @@
 use log::debug;
-use packets::{initialize::pubkey::PubkeyMsg, types::WSMessage};
+use packets::{initialize::pubkey::PubkeyMsg, types::ByteMessage};
 use uuid::Uuid;
 
 use crate::utils::types::Users;

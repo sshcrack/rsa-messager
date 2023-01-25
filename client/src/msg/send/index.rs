@@ -3,7 +3,7 @@ use std::sync::atomic::Ordering;
 
 use packets::communication::to::ToMsg;
 use packets::initialize::pubkey::PubkeyMsg;
-use packets::types::WSMessage;
+use packets::types::ByteMessage;
 use packets::util::modes::Modes;
 use tokio_tungstenite::tungstenite::Message;
 
@@ -17,8 +17,6 @@ pub async fn send_msgs() -> anyhow::Result<()> {
     let keypair = get_curr_keypair().await?;
 
     let pem_vec = keypair.public_key_to_pem()?;
-    let pem_vec = String::from_utf8(pem_vec)?;
-
     let initial_msg = PubkeyMsg{ pubkey: pem_vec }.serialize();
 
     send_msg(Message::binary(initial_msg)).await?;

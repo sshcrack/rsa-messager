@@ -1,5 +1,5 @@
 use colored::Colorize;
-use packets::{file::{question::reply::FileQuestionReplyMsg, types::FileInfo}, types::WSMessage};
+use packets::{file::{question::reply::FileQuestionReplyMsg, types::FileInfo}, types::ByteMessage};
 
 use crate::{util::tools::uuid_to_name, file::tools::get_pending_file};
 

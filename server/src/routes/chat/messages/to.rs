@@ -1,4 +1,4 @@
-use packets::{communication::{to::ToMsg, from::FromMsg}, types::WSMessage};
+use packets::{communication::{to::ToMsg, from::FromMsg}, types::ByteMessage};
 use uuid::Uuid;
 use warp::ws::Message;
 

@@ -1,6 +1,6 @@
 use colored::Colorize;
 use log::trace;
-use packets::{file::processing::start::FileStartProcessing, types::WSMessage};
+use packets::{file::processing::start::FileStartProcessing, types::ByteMessage};
 
 use crate::{util::{tools::uuid_to_name, consts::FILE_UPLOADS}, file::{tools::get_pending_file, uploader::index::Uploader}, encryption::rsa::get_pubkey_from_rec};
 

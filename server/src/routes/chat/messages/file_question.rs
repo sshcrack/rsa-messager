@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use log::trace;
-use packets::{file::{question::{index::FileQuestionMsg}, types::FileInfo}, types::WSMessage, communication::error::ErrorMsg};
+use packets::{file::{question::{index::FileQuestionMsg}, types::FileInfo}, types::ByteMessage, communication::error::ErrorMsg};
 use warp::ws::Message;
 
 use crate::{utils::{

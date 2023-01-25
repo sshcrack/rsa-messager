@@ -3,14 +3,14 @@ use std::collections::VecDeque;
 use log::trace;
 use uuid::Uuid;
 
-use crate::{types::WSMessage, util::{modes::Modes, tools::{uuid_from_vec, u64_from_vec}, converter::uuid_to_decque, vec::{vec_to_decque, decque_to_vec}}};
+use crate::{types::ByteMessage, util::{modes::Modes, tools::{uuid_from_vec, u64_from_vec}, converter::uuid_to_decque, vec::{vec_to_decque, decque_to_vec}}};
 
 pub struct FileStartProcessing {
     pub uuid: Uuid,
     pub threads: u64
 }
 
-impl WSMessage for FileStartProcessing {
+impl ByteMessage for FileStartProcessing {
     fn serialize(&self) -> Vec<u8> {
         let mut merged = VecDeque::new();
         let mut b_uuid = uuid_to_decque(&self.uuid);

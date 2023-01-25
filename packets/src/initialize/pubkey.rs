@@ -1,13 +1,13 @@
 use log::trace;
-use rsa::{RsaPublicKey, pkcs8::DecodePublicKey};
+use openssl::rsa::Rsa;
 
-use crate::{types::WSMessage, util::modes::Modes};
+use crate::{types::ByteMessage, util::modes::Modes};
 
 pub struct PubkeyMsg {
     pub pubkey: String
 }
 
-impl WSMessage for PubkeyMsg {
+impl ByteMessage for PubkeyMsg {
     fn serialize(&self) -> Vec<u8> {
         return Modes::SetPubkey.get_send(&self.pubkey.as_bytes().to_vec());
     }
@@ -16,9 +16,9 @@ impl WSMessage for PubkeyMsg {
         let data = data.clone();
 
         trace!("Parsing public key of length {}...", data.len());
-        let pubkey = String::from_utf8(data)?;
-        RsaPublicKey::from_public_key_pem(&pubkey)?;
+        Rsa::public_key_from_pem(&data)?;
 
+        let pubkey = String::from_utf8(data)?;
         return Ok(PubkeyMsg {
             pubkey
         });

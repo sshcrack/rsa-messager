@@ -2,7 +2,7 @@ use anyhow::anyhow;
 use openssl::{rsa::Rsa, pkey::Private};
 use uuid::Uuid;
 
-use super::consts::{RECEIVER, CURR_ID, KEYPAIR};
+use super::consts::{RECEIVER, CURR_ID, KEYPAIR, TX_CHANNEL};
 
 
 pub async fn get_curr_keypair() -> anyhow::Result<Rsa<Private>> {

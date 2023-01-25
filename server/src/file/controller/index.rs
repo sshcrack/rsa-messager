@@ -1,5 +1,5 @@
 use log::trace;
-use packets::{file::{types::FileInfo, processing::{start::FileStartProcessing, tools::get_max_threads}}, types::WSMessage};
+use packets::{file::{types::FileInfo, processing::{start::FileStartProcessing, tools::get_max_threads}}, types::ByteMessage};
 use uuid::Uuid;
 use warp::ws::Message;
 

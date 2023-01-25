@@ -1,5 +1,5 @@
 use colored::Colorize;
-use packets::{initialize::name::NameMsg, types::WSMessage};
+use packets::{initialize::name::NameMsg, types::ByteMessage};
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::util::msg::send_msg;

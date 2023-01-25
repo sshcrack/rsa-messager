@@ -1,7 +1,7 @@
 use log::trace;
 use packets::{
     file::question::reply::FileQuestionReplyMsg,
-    types::WSMessage,
+    types::ByteMessage,
 };
 use warp::ws::Message;
 

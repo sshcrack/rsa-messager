@@ -1,13 +1,13 @@
 use anyhow::anyhow;
 use log::trace;
 
-use crate::{types::WSMessage, util::modes::Modes};
+use crate::{types::ByteMessage, util::modes::Modes};
 
 pub struct NameMsg {
     pub name: String
 }
 
-impl WSMessage for NameMsg {
+impl ByteMessage for NameMsg {
     fn serialize(&self) -> Vec<u8> {
         return Modes::Name.get_send(&self.name.as_bytes().to_vec());
     }

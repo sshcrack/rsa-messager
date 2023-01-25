@@ -3,7 +3,7 @@ use std::{path::Path, fs::File};
 use log::trace;
 use colored::Colorize;
 use openssl::rand;
-use packets::{file::{question::index::FileQuestionMsg, types::FileInfo}, types::WSMessage, consts::U64_SIZE};
+use packets::{file::{question::index::FileQuestionMsg, types::FileInfo}, types::ByteMessage, consts::U64_SIZE};
 use tokio_tungstenite::tungstenite::Message;
 use uuid::Uuid;
 

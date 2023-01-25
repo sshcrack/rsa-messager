@@ -1,4 +1,4 @@
-use packets::{initialize::uid_reply::UidReplyMsg, types::WSMessage};
+use packets::{initialize::uid_reply::UidReplyMsg, types::ByteMessage};
 use uuid::Uuid;
 use warp::ws::Message;
 

@@ -1,4 +1,4 @@
-use packets::{communication::from::FromMsg, types::WSMessage};
+use packets::{communication::from::FromMsg, types::ByteMessage};
 
 use crate::{encryption::rsa::decrypt, util::{arcs::get_curr_keypair, msg::print_from_msg}, web::user_info::get_user_info};
 

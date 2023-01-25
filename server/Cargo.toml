@@ -17,11 +17,11 @@ clap = { version = "4.1.1", features = ["derive"] }
 warp = "0.3.3"
 colorize = "0.1.0"
 anyhow = { version = "1.0.68", features = ["backtrace"] }
-rsa = "0.8.0"
 lazy_static = "1.4.0"
 log = "0.4.17"
 readonly = "0.2.3"
 packets = { path = "../packets" }
+openssl = "0.10.45"
 
 [features]
 env = []

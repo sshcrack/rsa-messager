@@ -2,13 +2,13 @@ use std::collections::VecDeque;
 
 use uuid::Uuid;
 
-use crate::{types::WSMessage, util::{converter::uuid_to_decque, vec::decque_to_vec, modes::Modes, tools::uuid_from_vec}};
+use crate::{types::ByteMessage, util::{converter::uuid_to_decque, vec::decque_to_vec, modes::Modes, tools::uuid_from_vec}};
 
 pub struct UidReplyMsg {
     pub uuid: Uuid
 }
 
-impl WSMessage for UidReplyMsg {
+impl ByteMessage for UidReplyMsg {
     fn serialize(&self) -> Vec<u8> {
         let mut merged: VecDeque<u8> = VecDeque::new();
         let mut b_uuid = uuid_to_decque(&self.uuid);

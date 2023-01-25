@@ -6,7 +6,7 @@ use log::{debug, trace, warn};
 use openssl::{pkey::Public, rsa::Rsa};
 use packets::{
     consts::CHUNK_SIZE,
-    file::{processing::tools::get_max_threads, types::FileInfo},
+    file::{processing::tools::get_max_threads, types::FileInfo, chunk::index::{ChunkByteMessage, ChunkMsg}}, encryption::sign::get_signature,
 };
 use tokio::{
     fs::File,
@@ -14,9 +14,10 @@ use tokio::{
     sync::RwLock,
     task::JoinHandle,
 };
+use tokio_tungstenite::tungstenite::Message;
 use uuid::Uuid;
 
-use crate::encryption::rsa::encrypt;
+use crate::{encryption::rsa::encrypt, util::{arcs::get_curr_keypair, consts::TX_CHANNEL, msg::send_msg}};
 
 pub type ProgressChannel = Receiver<f32>;
 pub type ArcProgressChannel = Arc<RwLock<ProgressChannel>>;
@@ -147,7 +148,15 @@ impl UploadWorker {
                     bytes_read += to_read;
                 }
 
-                let buf = encrypt(key, &buf.buffer().to_vec())?;
+                let encrypted = encrypt(key, &buf.buffer().to_vec())?;
+                let keypair = get_curr_keypair().await?;
+                let signature = get_signature(&encrypted, &keypair)?;
+
+                send_msg(Message::binary(ChunkMsg {
+                    signature,
+                    encrypted,
+                    uuid
+                }.serialize()));
 
                 tx.send(1 as f32)?;
                 debug!("Worker {} of file {} done.", i, uuid);

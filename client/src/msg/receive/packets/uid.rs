@@ -1,7 +1,7 @@
 use std::sync::atomic::Ordering;
 
 use colored::Colorize;
-use packets::{initialize::uid_reply::UidReplyMsg, types::WSMessage};
+use packets::{initialize::uid_reply::UidReplyMsg, types::ByteMessage};
 
 use crate::{
     input::receiver::select_receiver,

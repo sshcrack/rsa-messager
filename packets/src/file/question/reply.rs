@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use log::trace;
 use uuid::Uuid;
 
-use crate::{types::WSMessage, util::{converter::{pop_front_vec, uuid_to_decque}, vec::decque_to_vec, modes::Modes, tools::uuid_from_vec}};
+use crate::{types::ByteMessage, util::{converter::{pop_front_vec, uuid_to_decque}, vec::decque_to_vec, modes::Modes, tools::uuid_from_vec}};
 
 #[derive(Debug, Clone)]
 pub struct FileQuestionReplyMsg {
@@ -11,7 +11,7 @@ pub struct FileQuestionReplyMsg {
     pub accepted: bool
 }
 
-impl WSMessage for FileQuestionReplyMsg {
+impl ByteMessage for FileQuestionReplyMsg {
     fn serialize(&self) -> Vec<u8> {
         let mut merged: VecDeque<u8> = VecDeque::new();
 
