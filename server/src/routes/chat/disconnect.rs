@@ -1,6 +1,6 @@
 use uuid::Uuid;
 
-use crate::{utils::types::{Users, UsersList}, file::consts::{USERS_LIST, USERS}};
+use crate::file::consts::{USERS_LIST, USERS};
 
 pub async fn user_disconnected(my_id: Uuid) {
     eprintln!("good bye user: {}", my_id);

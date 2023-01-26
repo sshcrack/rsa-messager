@@ -2,7 +2,7 @@ use anyhow::anyhow;
 use openssl::{rsa::Rsa, pkey::Private};
 use uuid::Uuid;
 
-use super::consts::{RECEIVER, CURR_ID, KEYPAIR, TX_CHANNEL, BASE_URL, USE_TLS};
+use super::consts::{RECEIVER, CURR_ID, KEYPAIR, BASE_URL, USE_TLS};
 
 
 pub async fn get_curr_keypair() -> anyhow::Result<Rsa<Private>> {
@@ -17,7 +17,6 @@ pub async fn get_curr_keypair() -> anyhow::Result<Rsa<Private>> {
     return Ok(keypair.unwrap());
 }
 
-#[allow(unused)]  // TODO
 pub async fn get_curr_id() -> anyhow::Result<Uuid> {
     let state = CURR_ID.read().await;
     let curr_id = state.clone();

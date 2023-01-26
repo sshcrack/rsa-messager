@@ -6,13 +6,15 @@ use openssl::rsa::Rsa;
 use uuid::Uuid;
 
 use crate::encryption::sign::verify_data;
+use crate::util::tools::u64_from_vec;
 use crate::util::{tools::{usize_from_vec, uuid_from_vec}, vec::extract_vec};
 
 
 pub struct ChunkMsg {
     pub signature: Vec<u8>,
     pub encrypted: Vec<u8>,
-    pub uuid: Uuid
+    pub uuid: Uuid,
+    pub chunk_index: u64
 }
 
 pub trait  ChunkByteMessage {
@@ -29,9 +31,12 @@ impl ChunkByteMessage for ChunkMsg {
         let signature_size = self.signature.len().to_le_bytes().to_vec();
         let mut b_uuid = self.uuid.clone().as_bytes().to_vec();
 
+        let mut b_chunk_index = self.chunk_index.clone().to_le_bytes().to_vec();
+
         merged.append(&mut signature_size.clone());
         merged.append(&mut self.signature.clone());
         merged.append(&mut b_uuid);
+        merged.append(&mut b_chunk_index);
         merged.append(&mut b_encrypted.clone());
 
         return merged;
@@ -45,6 +50,7 @@ impl ChunkByteMessage for ChunkMsg {
         let signature = extract_vec(0..signature_size, &mut data)?;
 
         let uuid = uuid_from_vec(&mut data)?;
+        let chunk_index = u64_from_vec(&mut data)?;
 
         let valid = verify_data(&data, &signature, pubkey)?;
         if !valid {
@@ -54,7 +60,8 @@ impl ChunkByteMessage for ChunkMsg {
         return Ok(ChunkMsg {
             signature,
             encrypted: data,
-            uuid
+            uuid,
+            chunk_index
         });
     }
 }

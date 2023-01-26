@@ -6,5 +6,5 @@ use uuid::Uuid;
 
 use super::controller::index::Controller;
 
-pub type FileControllers = Arc<RwLock<HashMap<Uuid, Controller>>>;
+pub type FileControllers = Arc<RwLock<HashMap<Uuid, FileInfo>>>;
 pub type PendingUploads = Arc<RwLock<HashMap<Uuid, FileInfo>>>;

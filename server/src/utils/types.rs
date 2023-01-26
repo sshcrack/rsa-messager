@@ -1,7 +1,6 @@
 use std::{sync::Arc, collections::HashMap};
 
 use clap::Parser;
-use futures_util::lock::Mutex;
 use serde::{Serialize, Deserialize};
 use tokio::sync::{mpsc::{self, UnboundedSender}, RwLock};
 use uuid::Uuid;
@@ -18,6 +17,12 @@ pub struct UserInfo {
     pub sender: mpsc::UnboundedSender<Message>,
     pub name: Option<String>,
     pub public_key: Option<String>,
+}
+
+impl UserInfo {
+    pub fn to_basic(&self) -> UserInfoBasic {
+        UserInfoBasic { name: self.name.clone(), public_key: self.public_key.clone() }
+    }
 }
 
 pub type Users = Arc<RwLock<HashMap<Uuid, UserInfo>>>;

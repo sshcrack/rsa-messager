@@ -19,14 +19,10 @@ async fn main() {
 
     // Keep track of all connected users, key is usize, value
     // is a websocket sender.
-
-    let users_list = UsersList::default();
-    let users = Users::default();
-
     let args = Args::parse();
 
     let addr = args.bind.unwrap_or(IpAddr::V4(Ipv4Addr::new(127,0,0,1)));
     let port = args.port;
 
-    serve_routes((addr, port), users, users_list).await;
+    serve_routes((addr, port)).await;
 }

@@ -1,16 +1,13 @@
 use std::{collections::HashMap, net::SocketAddr};
 
-use crate::{
-    routes::{chat::connect::user_connected, files::upload::on_upload, index::get_index},
-    utils::types::{Users, UsersList},
-};
+use crate::routes::{chat::connect::user_connected, files::upload::on_upload, index::get_index};
 use colorize::AnsiColor;
 use packets::consts::CHUNK_SIZE;
 use warp::Filter;
 
 use super::{info::on_info, list::on_list};
 
-pub async fn serve_routes(addr: impl Into<SocketAddr>, users: Users, list: UsersList) {
+pub async fn serve_routes(addr: impl Into<SocketAddr>) {
     // GET / -> index html
     let index = warp::path::end().and_then(get_index);
 

@@ -1,6 +1,5 @@
 use std::{collections::HashMap, str::FromStr};
 
-use lazy_static::__Deref;
 use uuid::Uuid;
 use warp::hyper::Response;
 

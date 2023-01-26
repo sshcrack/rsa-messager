@@ -155,15 +155,15 @@ impl UploadWorker {
                 let url = format!("{}//{}/file/upload", http_protocol, base_url);
                 let client = reqwest::Client::new();
 
+                trace!("Uploading chunk {} to {}...", i, url);
                 let body = ChunkMsg {
                     signature,
                     encrypted,
-                    uuid
+                    uuid,
+                    chunk_index: i
                 }.serialize();
 
                 trace!("Uploading chunk {}...", i);
-                let (tx, rx) = crossbeam_channel::unbounded();
-
 
                 upload_file(&client, url, body).await?;
                 tx.send(1 as f32)?;

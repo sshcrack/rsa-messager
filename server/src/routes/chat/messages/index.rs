@@ -4,7 +4,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use uuid::Uuid;
 use warp::ws::Message;
 
-use crate::utils::{types::Users, vec::{vec_to_decque, decque_to_vec}};
+use crate::utils::vec::{vec_to_decque, decque_to_vec};
 
 use super::{name::on_name, pubkey::on_pubkey, to::on_to, uid::on_uid, file_question::on_file_question, file_question_reply::on_file_question_reply};
 

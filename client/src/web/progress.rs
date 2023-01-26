@@ -1,11 +1,7 @@
 use anyhow::anyhow;
 use crossbeam_channel::Sender;
-use packets::consts::ONE_MB_SIZE;
-use reqwest::Body;
 use tokio::sync::RwLock;
 use std::{cmp::min, sync::Arc};
-use async_stream::AsyncStream;
-use std::future::Future;
 
 use futures_util::StreamExt;
 use reqwest::Client;

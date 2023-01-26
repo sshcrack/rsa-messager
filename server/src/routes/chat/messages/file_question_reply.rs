@@ -14,7 +14,8 @@ pub async fn on_file_question_reply(data: &Vec<u8>) -> anyhow::Result<()> {
     let msg = FileQuestionReplyMsg::deserialize(&data)?;
 
 
-    let file = get_pending_file(msg.uuid).await?;
+    trace!("Getting pending file for file question reply");
+    let file = get_pending_file(&msg.uuid).await?;
 
     let to_send = msg.serialize();
     send_msg_specific(file.receiver, Message::binary(to_send)).await?;
@@ -27,7 +28,8 @@ pub async fn on_file_question_reply(data: &Vec<u8>) -> anyhow::Result<()> {
         drop(state);
     } else {
         let uuid = msg.uuid;
-        let file = get_pending_file(uuid).await?;
+        trace!("Getting pending file for file question reply else");
+        let file = get_pending_file(&uuid).await?;
 
         trace!("Removing pending upload from {}", uuid);
         let mut state = PENDING_UPLOADS.write().await;
@@ -36,10 +38,11 @@ pub async fn on_file_question_reply(data: &Vec<u8>) -> anyhow::Result<()> {
         drop(state);
 
         trace!("Adding controller to uploading files {}", uuid);
-        let controller = Controller::new(&uuid, file).await?;
+        // TODO maybe useless?
+        Controller::new(&uuid, file.clone()).await?;
 
         let mut state = UPLOADING_FILES.write().await;
-        state.insert(uuid, controller);
+        state.insert(uuid, file);
 
         drop(state);
     }

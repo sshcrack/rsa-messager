@@ -50,6 +50,7 @@ impl Uploader {
     }
 
     pub async fn start(&mut self, max_threads: u64) -> anyhow::Result<()> {
+        trace!("Waiting for read...");
         let state = self.workers.read().await;
 
         if !state.is_empty() {
