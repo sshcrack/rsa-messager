@@ -73,7 +73,7 @@ pub async fn send_msgs() -> anyhow::Result<()> {
 
 
         let key = get_pubkey_from_rec(&rec_got).await?;
-        let encrypted = encrypt(key, &line.as_bytes().to_vec())?;
+        let encrypted = encrypt(&key, &line.as_bytes().to_vec())?;
 
         print_from_msg("you", &line);
 

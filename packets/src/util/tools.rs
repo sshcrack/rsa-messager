@@ -1,4 +1,5 @@
 use anyhow::anyhow;
+use log::trace;
 use uuid::Uuid;
 
 use crate::consts::{UUID_SIZE, U64_SIZE, USIZE_SIZE};
@@ -36,7 +37,7 @@ pub fn uuid_from_vec(v: &mut Vec<u8>) -> anyhow::Result<Uuid> {
 
 pub fn u64_from_vec(v: &mut Vec<u8>) -> anyhow::Result<u64> {
     if v.len() < U64_SIZE {
-        return Err(anyhow!(format!("Cannot parse u64 as length is too close ({})", v.len())));
+        return Err(anyhow!(format!("Cannot parse u64 as vector is not long enough ({} items)", v.len())));
     }
 
     let temp = v.splice(0..U64_SIZE, vec![]);
@@ -54,7 +55,7 @@ pub fn u64_from_vec(v: &mut Vec<u8>) -> anyhow::Result<u64> {
 
 pub fn usize_from_vec(v: &mut Vec<u8>) -> anyhow::Result<usize> {
     if v.len() < USIZE_SIZE {
-        return Err(anyhow!(format!("Cannot parse usize as length is too close ({})", v.len())));
+        return Err(anyhow!(format!("Cannot parse usize as vector is not long enough ({} items)", v.len())));
     }
 
     let temp = v.splice(0..USIZE_SIZE, vec![]);

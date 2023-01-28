@@ -10,7 +10,7 @@ use reqwest::Client;
 pub async fn download_file(
     client: &Client,
     url: String,
-    sender: Sender<f32>
+    sender: &Sender<f32>
 ) -> anyhow::Result<Vec<u8>> {
     let arc = Arc::new(RwLock::new(sender));
 
@@ -32,6 +32,7 @@ pub async fn download_file(
     let state = arc.read().await;
     while let Some(item) = stream.next().await {
         if item.is_err() {
+            //TODO maybe useless drop?
             drop(state);
             return Err(item.unwrap_err().into());
         }
@@ -41,8 +42,11 @@ pub async fn download_file(
 
         let new = min(downloaded + (chunk.len() as u64), total_size);
         downloaded = new;
+        state.send((new as f32) / (total_size as f32))?;
     }
 
+    //TODO maybe useless drop?
+    drop(state);
     return Ok(buffer);
 }
 

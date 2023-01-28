@@ -3,6 +3,6 @@
         "decque"
     ],
     "terminal.integrated.env.windows": {
-        "RUST_LOG": "client,tungestenit,packets"
+        "RUST_LOG": "server,tungestenit,packets"
     }
 }

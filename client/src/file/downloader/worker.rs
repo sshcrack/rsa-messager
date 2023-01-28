@@ -1,23 +1,34 @@
-use std::{io::{SeekFrom, Write}, path::Path, sync::Arc};
+use std::{io::SeekFrom, path::Path, sync::Arc};
 
 use anyhow::anyhow;
 use crossbeam_channel::{Receiver, Sender};
 use log::{debug, trace, warn};
 use openssl::{pkey::Public, rsa::Rsa};
 use packets::{
-    consts::{CHUNK_SIZE, ONE_MB_SIZE},
-    file::{processing::{tools::get_max_threads, ready::ChunkReadyMsg}, types::FileInfo, chunk::index::{ChunkByteMessage, ChunkMsg}}, encryption::sign::get_signature, types::ByteMessage,
+    consts::CHUNK_SIZE_I64,
+    file::{
+        chunk::index::{ChunkByteMessage, ChunkMsg},
+        processing::{downloaded::ChunkDownloadedMsg, tools::get_max_threads},
+        types::FileInfo,
+    }, types::ByteMessage, encryption::sign::get_signature,
 };
 use tokio::{
-    fs::File,
-    io::{AsyncReadExt, AsyncSeekExt, BufReader, AsyncWriteExt},
-    sync::RwLock,
+    fs::OpenOptions,
+    io::{AsyncSeekExt, AsyncWriteExt},
+    sync::{Mutex, RwLock},
     task::JoinHandle,
 };
 use tokio_tungstenite::tungstenite::Message;
 use uuid::Uuid;
 
-use crate::{encryption::rsa::encrypt, util::{arcs::{get_curr_keypair, get_base_url}, msg::send_msg}, web::{prefix::get_web_protocol, progress::upload_file}};
+use crate::{
+    encryption::rsa::decrypt,
+    util::{
+        arcs::{get_base_url, get_curr_keypair},
+        msg::send_msg,
+    },
+    web::{prefix::get_web_protocol, progress::download_file},
+};
 
 pub type ProgressChannel = Receiver<f32>;
 pub type ArcProgressChannel = Arc<RwLock<ProgressChannel>>;
@@ -26,7 +37,7 @@ pub type ProgressTX = Sender<f32>;
 pub type ArcProgressTX = Arc<RwLock<ProgressTX>>;
 
 #[derive(Debug)]
-pub struct UploadWorker {
+pub struct DownloadWorker {
     worker_id: u64,
     uuid: Uuid,
     file: FileInfo,
@@ -34,31 +45,28 @@ pub struct UploadWorker {
     running: bool,
     tx: ArcProgressTX,
     pub progress_channel: ArcProgressChannel,
-    key: Rsa<Public>,
+    sender_key: Rsa<Public>,
+    file_lock: Arc<Mutex<bool>>,
 }
 
-impl UploadWorker {
+impl DownloadWorker {
     pub fn new(
         worker_id: u64,
         uuid: Uuid,
-        key: Rsa<Public>,
+        sender_key: Rsa<Public>,
         file: FileInfo,
-    ) -> anyhow::Result<UploadWorker> {
+        file_lock: Arc<Mutex<bool>>,
+    ) -> anyhow::Result<Self> {
         let FileInfo { filename, size, .. } = file.clone();
 
         let path = Path::new(&filename);
+        let left = fs2::available_space(path)?;
 
-        if !path.is_file() {
-            eprintln!("Could not send file at {} (does not exist)", filename);
-            return Err(anyhow!("File {} does not exist.", filename));
-        }
-
-        let metadata = path.metadata()?;
-        if metadata.len() != size {
+        if left < size {
             eprintln!(
-                "Size of file does not match with metadata (metadata {}, given {})",
-                metadata.len(),
-                file.size
+                "Not enough size on your disk left ({} left, {} needed)",
+                pretty_bytes::converter::convert(left as f64),
+                pretty_bytes::converter::convert(file.size as f64)
             );
             return Err(anyhow!("Size of file does not match with metadata"));
         }
@@ -67,7 +75,7 @@ impl UploadWorker {
         let arc = Arc::new(RwLock::new(rx));
         let arc_tx = Arc::new(RwLock::new(tx));
 
-        return Ok(UploadWorker {
+        return Ok(DownloadWorker {
             worker_id,
             file,
             uuid,
@@ -75,7 +83,8 @@ impl UploadWorker {
             tx: arc_tx,
             progress_channel: arc,
             running: false,
-            key,
+            sender_key,
+            file_lock,
         });
     }
 
@@ -94,7 +103,8 @@ impl UploadWorker {
 
         let filename = file.filename.clone();
         let size = file.size;
-        let key = self.key.clone();
+        let sender_key = self.sender_key.clone();
+        let file_lock_arc = self.file_lock.clone();
 
         let handle: JoinHandle<anyhow::Result<()>> = tokio::spawn(async move {
             let tx = tx.read().await;
@@ -112,72 +122,58 @@ impl UploadWorker {
                     max_threads
                 );
 
-                let path = Path::new(&filename);
-                let f = File::open(&path).await?;
-                let mut buf = BufReader::new(f);
-                let seek_to = i64::try_from(CHUNK_SIZE * i)?;
-
-                buf.seek(SeekFrom::Current(seek_to)).await?;
-
-                let is_last_chunk = (i + max_threads) >= max_threads;
-
-                let chunk_size_u64 = if is_last_chunk {
-                    std::cmp::min(CHUNK_SIZE, size)
-                } else {
-                    CHUNK_SIZE
-                };
-                let chunk_size = usize::try_from(chunk_size_u64)?;
-
-                let mut chunk = Vec::with_capacity(chunk_size);
-
-                trace!("Reading file with chunk size {} (i: {})", chunk_size, i);
-                let mut bytes_read = 0;
-                while bytes_read < chunk_size {
-                    let to_read = std::cmp::min(ONE_MB_SIZE, chunk_size_u64);
-                    let to_read = usize::try_from(to_read)?;
-                    let mut small_chunk = Vec::with_capacity(to_read);
-
-                    buf.read_exact(&mut small_chunk).await?;
-                    chunk.append(&mut small_chunk);
-
-                    let percentage = (bytes_read as f32) / (chunk_size as f32) * 0.5;
-                    tx.send(percentage)?;
-
-                    bytes_read += to_read;
-                }
-
-                let encrypted = encrypt(&key, &buf.buffer().to_vec())?;
+                let file_lock = file_lock_arc.lock().await;
                 let keypair = get_curr_keypair().await?;
-                let signature = get_signature(&encrypted, &keypair)?;
+
+
+                let uuid_signature = get_signature(&uuid.to_bytes_le().to_vec(), &keypair)?;
 
                 let base_url = get_base_url().await;
                 let http_protocol = get_web_protocol().await;
 
-                let url = format!("{}//{}/file/upload", http_protocol, base_url);
+                let url = format!(
+                    "{}//{}/file/download?i={}&uuid={}&signature={}",
+                    http_protocol,
+                    base_url,
+                    i,
+                    uuid.to_string(),
+                    hex::encode(uuid_signature)
+                );
                 let client = reqwest::Client::new();
 
-                trace!("Uploading chunk {} to {}... {:?} {:?}", i, url, signature, uuid);
-                let body = ChunkMsg {
-                    signature,
-                    encrypted,
-                    uuid,
-                    chunk_index: i
-                }.serialize();
+                let response = download_file(&client, url, &tx).await?;
 
-                let mut e = File::create("target/chunk.bin").await?;
-                e.write_all(&body).await?;
-                e.shutdown().await?;
+                // Signature is validated in deserialize, so its fine
+                let deserialized = ChunkMsg::deserialize(&response, &sender_key)?;
+                let encrypted = &deserialized.encrypted;
 
-                trace!("Uploading chunk {}...", i);
+                let decrypted = decrypt(&keypair, encrypted)?;
 
-                upload_file(&client, url, body).await?;
+                let offset = CHUNK_SIZE_I64 * i as i64;
+
+                trace!("Chunk downloaded. Saving...");
+                let path = Path::new(&filename);
+                let mut f = OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .open(&path)
+                    .await?;
+
+                f.seek(SeekFrom::Current(offset)).await?;
+                f.write_all(&decrypted).await?;
+
+                drop(file_lock);
+
                 tx.send(1 as f32)?;
-                debug!("Worker {} of file {} done.", i, uuid);
 
-                send_msg(Message::Binary(ChunkReadyMsg {
-                    chunk_index: i,
-                    uuid
-                }.serialize())).await?;
+                send_msg(Message::Binary(
+                    ChunkDownloadedMsg {
+                        chunk_index: i,
+                        uuid,
+                    }
+                    .serialize(),
+                )).await?;
+                debug!("Worker {} of file {} done.", i, uuid);
                 Ok(())
             };
 

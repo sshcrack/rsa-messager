@@ -3,10 +3,10 @@ use std::{collections::HashMap, str::FromStr};
 use uuid::Uuid;
 use warp::hyper::Response;
 
-use crate::{utils::types::{UserInfoBasic}, file::consts::USERS};
+use crate::{utils::types::UserInfoBasic, file::consts::USERS};
 
 
-pub async fn on_info(p: HashMap<String, String>,) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+pub async fn on_info(p: HashMap<String, String>) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     let k = p.get("id");
     if k.is_none() {
         return Ok(Box::new(

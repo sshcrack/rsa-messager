@@ -17,6 +17,7 @@ pub enum Modes {
     SendFileChunkDownloaded,
     // Sent from server to sending client, to retrieve file size etc
     SendFileStartProcessing,
+    SendFileAbort
 }
 
 impl Modes {
@@ -33,7 +34,8 @@ impl Modes {
             Self::SendFileQuestionReply => 8,
             Self::SendFileChunkReady => 9,
             Self::SendFileChunkDownloaded => 10,
-            Self::SendFileStartProcessing => 11
+            Self::SendFileStartProcessing => 11,
+            Self::SendFileAbort => 12
         }
     }
 

@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::web::user_info::get_user_info;
 
-pub fn encrypt(key: Rsa<Public>, msg: &Vec<u8>) -> anyhow::Result<Vec<u8>> {
+pub fn encrypt(key: &Rsa<Public>, msg: &Vec<u8>) -> anyhow::Result<Vec<u8>> {
     let mut buf: Vec<u8> = vec![0; key.size() as usize];
 
     let size = key.public_encrypt(&msg, &mut buf, Padding::PKCS1_OAEP)?;
@@ -18,10 +18,10 @@ pub fn encrypt(key: Rsa<Public>, msg: &Vec<u8>) -> anyhow::Result<Vec<u8>> {
     return Ok(out);
 }
 
-pub fn decrypt(key: Rsa<Private>, cipher: Vec<u8>) -> anyhow::Result<Vec<u8>> {
+pub fn decrypt(key: &Rsa<Private>, cipher: &Vec<u8>) -> anyhow::Result<Vec<u8>> {
     let mut buf: Vec<u8> = vec![0; key.size() as usize];
 
-    let size = key.private_decrypt(&cipher, &mut buf, Padding::PKCS1_OAEP)?;
+    let size = key.private_decrypt(cipher, &mut buf, Padding::PKCS1_OAEP)?;
 
     let mut out = vec![0; size];
     for i in 0..size {

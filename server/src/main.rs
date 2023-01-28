@@ -2,7 +2,9 @@
 use std::net::{IpAddr, Ipv4Addr};
 
 use clap::Parser;
+use file::consts::CHUNK_DIR;
 use routes::router::serve_routes;
+use tokio::fs::remove_dir_all;
 use crate::utils::types::*;
 
 mod utils;
@@ -11,11 +13,14 @@ mod file;
 
 #[tokio::main]
 async fn main() {
-    if cfg!(debug_assertions) {
-        std::env::set_var("RUST_LOG", "server,tungestenit,packets");
-    }
-
     pretty_env_logger::init();
+    let p = CHUNK_DIR.as_path();
+    if p.is_dir() {
+        let e = remove_dir_all(p).await;
+        if e.is_err() {
+            eprintln!("Could not remove chunk dir: {}", e.unwrap_err());
+        }
+    }
 
     // Keep track of all connected users, key is usize, value
     // is a websocket sender.

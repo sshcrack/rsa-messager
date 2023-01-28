@@ -9,13 +9,13 @@ use packets::file::types::FileInfo;
 use tokio::{sync::{RwLock, Mutex}, task::JoinHandle};
 use uuid::Uuid;
 
-use crate::util::{consts::CONCURRENT_THREADS, tools::get_avg};
+use crate::util::consts::CONCURRENT_THREADS;
 
 use super::worker::UploadWorker;
 
 #[derive(Debug)]
 pub struct Uploader {
-    file: FileInfo,
+    info: FileInfo,
     uuid: Uuid,
 
     chunks_completed: Arc<RwLock<u64>>,
@@ -37,7 +37,7 @@ impl Uploader {
 
         return Self {
             uuid: uuid.clone(),
-            file: file.clone(),
+            info: file.clone(),
             threads: None,
             chunks_completed: Arc::new(RwLock::new(0)),
             workers: Arc::new(RwLock::new(Vec::new())),
@@ -65,7 +65,7 @@ impl Uploader {
         trace!("Spawning {} workers" , to_spawn);
         let mut state = self.workers.write().await;
         for i in 0..to_spawn {
-            let mut worker = UploadWorker::new(i, self.uuid, self.key.clone(), self.file.clone())?;
+            let mut worker = UploadWorker::new(i, self.uuid, self.key.clone(), self.info.clone())?;
 
             let e = worker.start(i);
             if e.is_err() {
@@ -75,7 +75,7 @@ impl Uploader {
 
             state.push(worker);
         }
-        println!("Dropping state workers...");
+        trace!("Dropping state workers...");
         drop(state);
 
         let state = self.workers.read().await;
@@ -134,12 +134,11 @@ impl Uploader {
         }
 
         let spawned = spawned.unwrap();
-    let spawned = usize::try_from(spawned)?;
+        let spawned = usize::try_from(spawned)?;
 
         let e = tokio::spawn(async move {
             let state = temp.read().await;
             while let Ok(should_run) = state.recv() {
-                println!("New update {}", should_run);
                 if !should_run  { break; }
 
                 let prog = temp2.read().await;
@@ -152,22 +151,21 @@ impl Uploader {
                     percentages.push(0 as f32);
                 };
 
-                let avg = get_avg(&percentages);
-                if avg.is_err() {
-                    drop(prog);
-                    break;
-                }
-
                 drop(prog);
-
-                let avg = avg.unwrap() * 100 as f32;
-                println!("Percentage: {}", avg)
             }
 
             drop(state);
         });
 
         return Ok(e);
+    }
+
+    pub async fn on_next(&self) -> anyhow::Result<()> {
+        let state = self.chunks_completed.read().await;
+        let curr = state.clone();
+
+        drop(state);
+        return self.start_upload(curr).await;
     }
 
     pub async fn start_upload(&self, chunk: u64) -> anyhow::Result<()> {

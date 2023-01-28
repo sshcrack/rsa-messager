@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 
 use anyhow::anyhow;
+use colored::Colorize;
 use futures_util::StreamExt;
 use packets::util::modes::Modes;
 use packets::util::vec::decque_to_vec;
@@ -9,8 +10,10 @@ use tokio_tungstenite::tungstenite::Message;
 use crate::util::types::*;
 
 use super::packets::error::on_error;
-use super::packets::file::file_question::on_file_question;
-use super::packets::file::file_question_reply::on_file_question_reply;
+use super::packets::file::chunk::downloaded::on_chunk_downloaded;
+use super::packets::file::chunk::ready::on_chunk_ready;
+use super::packets::file::question::index::on_file_question;
+use super::packets::file::question::reply::on_file_question_reply;
 use super::packets::file::start_processing::on_start_processing;
 use super::packets::{from::on_from, uid::on_uid};
 
@@ -21,10 +24,8 @@ pub async fn receive_msgs(
         let msg = msg?;
         let res = handle(msg).await;
         if res.is_err() {
-            eprintln!("----------------------------------");
-            eprintln!("Error occurred while processing message: ");
-            eprintln!("{:?}", res.unwrap_err());
-            eprintln!("----------------------------------");
+            eprintln!("Error occurred while processing message packet: ");
+            eprintln!("{}", format!("{:?}", res.unwrap_err()).on_bright_red().black());
         }
     }
 
@@ -76,6 +77,16 @@ pub async fn handle(
 
     if Modes::SendFileStartProcessing.is_indicator(&mode) {
         on_start_processing(&mut data).await?;
+        return Ok(());
+    }
+
+    if Modes::SendFileChunkReady.is_indicator(&mode) {
+        on_chunk_ready(&mut data).await?;
+        return Ok(());
+    }
+
+    if Modes::SendFileChunkDownloaded.is_indicator(&mode) {
+        on_chunk_downloaded(&mut data).await?;
         return Ok(());
     }
 

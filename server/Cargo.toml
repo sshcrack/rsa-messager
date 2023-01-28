@@ -22,6 +22,8 @@ log = "0.4.17"
 readonly = "0.2.3"
 packets = { path = "../packets" }
 openssl = "0.10.45"
+hex = "0.4.3"
+tokio-util = "0.7.4"
 
 [features]
 env = []

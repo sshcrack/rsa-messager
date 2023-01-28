@@ -25,5 +25,6 @@ lazy_static! {
 
     pub static ref PENDING_FILES: PendingFiles = PendingFiles::default();
     pub static ref FILE_UPLOADS: FileUploads = FileUploads::default();
+    pub static ref FILE_DOWNLOADS: FileDownloads = FileDownloads::default();
 
 }

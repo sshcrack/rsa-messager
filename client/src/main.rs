@@ -42,10 +42,6 @@ impl Error for ReqwestError {
 
 #[tokio::main]
 async fn main() {
-    if cfg!(debug_assertions) {
-        std::env::set_var("RUST_LOG", "client,tungestenit,packets");
-    }
-
     pretty_env_logger::init();
 
     let res = task::spawn(async move {

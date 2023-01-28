@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use futures_util::{Stream, StreamExt};
 use warp::Buf;
 
@@ -15,6 +16,7 @@ where
 S: Stream<Item = Result<B, warp::Error>> + Send + 'static + Unpin,
 B: Buf
 {
+    println!("Prev: {} size: {}", previous.len(), size);
     if previous.len() >= size {
         let res: Vec<u8> = previous.splice(0..size, vec![]).collect();
         return Ok(res);
@@ -38,6 +40,10 @@ B: Buf
         if res.len() > size {
             panic!("What the fuck just happened. The result of vec_from_stream should NEVER be higher than the given size");
         }
+    }
+
+    if res.len() < size {
+        return Err(anyhow!("Error, stream was not long enough."));
     }
 
     return Ok(res);

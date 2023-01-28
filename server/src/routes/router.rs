@@ -1,6 +1,10 @@
 use std::{collections::HashMap, net::SocketAddr};
 
-use crate::routes::{chat::connect::user_connected, files::upload::on_upload, index::get_index};
+use crate::routes::{
+    chat::connect::user_connected,
+    files::{download::on_download, upload::on_upload},
+    index::get_index,
+};
 use colorize::AnsiColor;
 use packets::consts::CHUNK_SIZE;
 use warp::Filter;
@@ -36,11 +40,13 @@ pub async fn serve_routes(addr: impl Into<SocketAddr>) {
         .and(warp::body::stream())
         .and_then(on_upload);
 
+    let download_route = warp::path!("file" / "download")
+        .and(warp::query::<HashMap<String, String>>())
+        .and_then(on_download);
+
     let routes = warp::get()
-        .and(index.or(chat).or(list_route).or(info_route))
-        .or(
-            warp::post().and(upload_route)
-        );
+        .and(index.or(chat).or(list_route).or(info_route).or(download_route))
+        .or(warp::post().and(upload_route));
     let addr: SocketAddr = addr.into();
 
     let url = format!("http://{}", addr).blue();

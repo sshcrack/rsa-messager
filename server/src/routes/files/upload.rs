@@ -4,19 +4,19 @@ use log::trace;
 use openssl::{pkey::PKey, rsa::Rsa, sign::Verifier};
 use packets::{
     consts::{MSG_DIGEST, U64_SIZE, USIZE_SIZE, UUID_SIZE},
-    util::tools::{u64_from_vec, usize_from_vec, uuid_from_vec},
+    util::tools::{u64_from_vec, usize_from_vec, uuid_from_vec}, file::processing::ready::ChunkReadyMsg, types::ByteMessage,
 };
 use tokio::{
-    fs::{remove_file, File},
+    fs::{File, remove_file},
     io::AsyncWriteExt,
 };
-use warp::{hyper::StatusCode, reply, Buf};
+use warp::{hyper::StatusCode, reply, Buf, ws::Message};
 
 use crate::{
     file::tools::{get_chunk_file, get_uploading_file},
     utils::{
         arcs::get_user,
-        stream::{s2vec, vec_from_stream},
+        stream::{s2vec, vec_from_stream}, tools::send_msg_specific,
     },
 };
 
@@ -30,8 +30,10 @@ where
         let mut signature_size = s2vec(&mut body, USIZE_SIZE, &mut previous).await?;
         let signature_size = usize_from_vec(&mut signature_size)?;
 
+        
         let signature = vec_from_stream(&mut body, signature_size, &mut previous).await?;
-
+        println!("Signature size {} sig {:?} prev {:?}", signature_size, signature, previous);
+        
         let mut uuid = s2vec(&mut body, UUID_SIZE, &mut previous).await?;
         let uuid = uuid_from_vec(&mut uuid)?;
 
@@ -52,7 +54,7 @@ where
         let p_key = PKey::from_rsa(pub_key.clone())?;
 
         let file_path = get_chunk_file(&uuid, chunk_index).await?;
-        let mut file = File::create(file_path.clone()).await?;
+        let mut chunk_file = File::create(file_path.clone()).await?;
 
         let e = std::env::current_dir()?;
         let e = e.join(file_path.clone());
@@ -62,41 +64,38 @@ where
             trace!("Writing chunk at {}", e.unwrap());
         }
 
-        let temp = pub_key.clone();
         let inner = async {
-            file.write_all(&previous).await?;
+            chunk_file.write_all(&previous).await?;
 
             let mut verifier = Verifier::new(*MSG_DIGEST, &p_key)?;
             verifier.update(&previous)?;
 
+            trace!("Starting to store file {}...", uuid);
             while let Some(item) = body.next().await {
                 let item = item?;
                 let item = item.chunk();
 
                 verifier.update(item)?;
-                file.write_all(item).await?;
+                chunk_file.write_all(item).await?;
             }
 
             let is_valid = verifier.verify(&signature)?;
-            if is_valid {
-                // TODO remove bc only DEV
-                let mut e = File::create("chunks/sig.bin").await?;
-                e.write_all(&signature).await?;
-                e.shutdown().await?;
-                let mut e = File::create("chunks/key.bin").await?;
-                e.write_all(&temp.public_key_to_pem()?).await?;
-                e.shutdown().await?;
-                // --- ------ end
+            if !is_valid {
                 return Err(anyhow!("Chunk is not valid."));
             }
 
+            trace!("Sending chunk ready");
+            send_msg_specific(file.receiver, Message::binary(ChunkReadyMsg {
+                uuid,
+                chunk_index
+            }.serialize())).await?;
             Ok(()) as anyhow::Result<()>
         };
 
         let res = inner.await;
         if res.is_err() {
-            let e = file.shutdown().await;
-            //TODO add back for release remove_file(file_path).await?;
+            let e = chunk_file.shutdown().await;
+            remove_file(file_path).await?;
             e?;
             res?;
         }

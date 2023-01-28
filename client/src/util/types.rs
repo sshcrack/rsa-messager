@@ -10,7 +10,7 @@ use tokio::{net::TcpStream, sync::RwLock};
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, tungstenite::Message};
 use uuid::Uuid;
 
-use crate::file::uploader::index::Uploader;
+use crate::file::{uploader::index::Uploader, downloader::index::Downloader};
 
 pub type Keypair = Arc<RwLock<Option<Rsa<Private>>>>;
 pub type BaseUrl = Arc<RwLock<String>>;
@@ -30,6 +30,7 @@ pub type ReceiveRX = Receiver<String>;
 pub type ReceiveTX = Sender<String>;
 
 pub type FileUploads = Arc<RwLock<HashMap<Uuid, Uploader>>>;
+pub type FileDownloads = Arc<RwLock<HashMap<Uuid, Downloader>>>;
 pub type PendingFiles = Arc<RwLock<HashMap<Uuid, FileInfo>>>;
 
 #[derive(Serialize, Deserialize)]

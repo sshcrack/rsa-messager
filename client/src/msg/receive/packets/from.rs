@@ -6,7 +6,7 @@ pub async fn on_from(data: &mut Vec<u8>) -> anyhow::Result<()> {
     let FromMsg { msg, sender } =  FromMsg::deserialize(data)?;
     let keypair = get_curr_keypair().await?;
 
-    let decrypted = decrypt(keypair.clone(), msg)?;
+    let decrypted = decrypt(&keypair, &msg)?;
     let msg = String::from_utf8(decrypted);
 
     if msg.is_err() {

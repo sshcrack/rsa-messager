@@ -5,7 +5,7 @@ use openssl::pkey::Public;
 use openssl::rsa::Rsa;
 use uuid::Uuid;
 
-use crate::encryption::sign::verify_data;
+use crate::encryption::sign::validate_signature;
 use crate::util::tools::u64_from_vec;
 use crate::util::{tools::{usize_from_vec, uuid_from_vec}, vec::extract_vec};
 
@@ -52,7 +52,7 @@ impl ChunkByteMessage for ChunkMsg {
         let uuid = uuid_from_vec(&mut data)?;
         let chunk_index = u64_from_vec(&mut data)?;
 
-        let valid = verify_data(&data, &signature, pubkey)?;
+        let valid = validate_signature(&data, &signature, pubkey)?;
         if !valid {
             return Err(anyhow!("Invalid signature in ChunkByteMsg"));
         }

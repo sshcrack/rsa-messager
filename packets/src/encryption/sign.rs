@@ -11,7 +11,7 @@ pub fn get_signature(data: &Vec<u8>, keypair: &Rsa<Private>) -> anyhow::Result<V
     return Ok(signer.sign_to_vec()?);
 }
 
-pub fn verify_data(data: &Vec<u8>, signature: &Vec<u8>, pubkey: &Rsa<Public>) -> anyhow::Result<bool> {
+pub fn validate_signature(data: &Vec<u8>, signature: &Vec<u8>, pubkey: &Rsa<Public>) -> anyhow::Result<bool> {
     let p_key = PKey::from_rsa(pubkey.clone())?;
     let mut verifier = Verifier::new(*MSG_DIGEST, &p_key)?;
     verifier.update(&data)?;
