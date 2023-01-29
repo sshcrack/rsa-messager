@@ -1,4 +1,4 @@
-use std::{io::{SeekFrom, Write}, path::Path, sync::Arc};
+use std::{io::SeekFrom, path::Path, sync::Arc};
 
 use anyhow::anyhow;
 use crossbeam_channel::{Receiver, Sender};
@@ -44,9 +44,13 @@ impl UploadWorker {
         key: Rsa<Public>,
         file: FileInfo,
     ) -> anyhow::Result<UploadWorker> {
-        let FileInfo { filename, size, .. } = file.clone();
+        let FileInfo { filename, size,path, .. } = file.clone();
+        if path.is_none() {
+            return Err(anyhow!("Can not upload file when path is not given."));
+        }
 
-        let path = Path::new(&filename);
+        let path = path.unwrap();
+        let path = Path::new(&path);
 
         if !path.is_file() {
             eprintln!("Could not send file at {} (does not exist)", filename);
@@ -92,7 +96,7 @@ impl UploadWorker {
 
         let i = thread_index;
 
-        let filename = file.filename.clone();
+        let path = file.path.unwrap();
         let size = file.size;
         let key = self.key.clone();
 
@@ -112,11 +116,12 @@ impl UploadWorker {
                     max_threads
                 );
 
-                let path = Path::new(&filename);
+                trace!("Reading file {}...", path.display());
                 let f = File::open(&path).await?;
                 let mut buf = BufReader::new(f);
                 let seek_to = i64::try_from(CHUNK_SIZE * i)?;
 
+                trace!("Seeking to {}", seek_to);
                 buf.seek(SeekFrom::Current(seek_to)).await?;
 
                 let is_last_chunk = (i + max_threads) >= max_threads;

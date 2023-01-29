@@ -10,7 +10,7 @@ pub struct ChunkAbortMsg {
 impl ByteMessage for ChunkAbortMsg {
     fn serialize(&self) -> Vec<u8> {
         let mut merged = Vec::new();
-        merged.append(&mut self.uuid.to_bytes_le().to_vec());
+        merged.append(&mut self.uuid.as_bytes().to_vec());
 
         return Modes::SendFileAbort.get_send(&merged);
     }

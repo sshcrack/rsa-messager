@@ -18,7 +18,7 @@ B: Buf
 {
     println!("Prev: {} size: {}", previous.len(), size);
     if previous.len() >= size {
-        let res: Vec<u8> = previous.splice(0..(size -1), vec![]).collect();
+        let res: Vec<u8> = previous.splice(0..size, vec![]).collect();
         return Ok(res);
     }
 

@@ -23,6 +23,7 @@ pub async fn on_chunk_ready(data: &mut Vec<u8>) -> anyhow::Result<()> {
         return Ok(());
     }
 
+    trace!("Received ready msg. Starting to download with index {}", msg.chunk_index);
     let downloader = downloader.unwrap();
     downloader.start_downloading(msg.chunk_index).await?;
 

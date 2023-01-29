@@ -50,6 +50,10 @@ impl Uploader {
     }
 
     pub async fn start(&mut self, max_threads: u64) -> anyhow::Result<()> {
+        if self.info.path.is_none() {
+            return Err(anyhow!("Can not start uploader when download path is none."));
+        }
+
         trace!("Waiting for read...");
         let state = self.workers.read().await;
 

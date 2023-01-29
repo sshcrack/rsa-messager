@@ -4,5 +4,8 @@
     ],
     "terminal.integrated.env.windows": {
         "RUST_LOG": "client,tungestenit,packets"
+    },
+    "terminal.integrated.env.linux": {
+        "RUST_LOG": "client,tungestenit,packets"
     }
 }

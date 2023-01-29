@@ -5,7 +5,6 @@ use log::trace;
 use packets::{file::processing::abort::ChunkAbortMsg, types::ByteMessage};
 use tokio::fs::{read_dir, remove_file};
 use uuid::Uuid;
-use warp::ws::Message;
 
 use crate::file::{tools::{get_uploading_file, get_pending_file}, consts::{CHUNK_DIR, PENDING_UPLOADS, UPLOADING_FILES}};
 

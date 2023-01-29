@@ -50,7 +50,7 @@ pub async fn on_download(
         let pub_key = pub_key.unwrap();
         let pub_key = Rsa::public_key_from_pem(&pub_key.as_bytes())?;
 
-        let is_valid = validate_signature(&uuid.to_bytes_le().to_vec(), &signature, &pub_key)?;
+        let is_valid = validate_signature(&uuid.as_bytes().to_vec(), &signature, &pub_key)?;
         if !is_valid {
             trace!("Not a valid signature");
             return Err(anyhow!("Receiver could not be verified."));

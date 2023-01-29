@@ -13,7 +13,7 @@ use crate::{
     },
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FileQuestionMsg {
     pub filename: String,
     pub sender: Uuid,

@@ -56,7 +56,8 @@ pub async fn on_file_question(
         filename: msg.filename.clone(),
         receiver: msg.receiver.clone(),
         sender,
-        size: msg.size
+        size: msg.size,
+        path: None
     };
 
     trace!("Storing file info {:#?}", info);

@@ -13,7 +13,7 @@ impl ByteMessage for ChunkDownloadedMsg {
         let mut merged = Vec::new();
         let mut b_chunk_index = self.chunk_index.to_le_bytes().to_vec();
 
-        merged.append(&mut self.uuid.to_bytes_le().to_vec());
+        merged.append(&mut self.uuid.as_bytes().to_vec());
         merged.append(&mut b_chunk_index);
 
         return Modes::SendFileChunkDownloaded.get_send(&merged);

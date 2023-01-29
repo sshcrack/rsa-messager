@@ -1,4 +1,4 @@
-use std::{io::SeekFrom, path::Path, sync::Arc};
+use std::{io::SeekFrom, path::{Path, PathBuf}, sync::Arc};
 
 use anyhow::anyhow;
 use crossbeam_channel::{Receiver, Sender};
@@ -57,11 +57,34 @@ impl DownloadWorker {
         file: FileInfo,
         file_lock: Arc<Mutex<bool>>,
     ) -> anyhow::Result<Self> {
-        let FileInfo { filename, size, .. } = file.clone();
+        let FileInfo { size, path, .. } = file.clone();
+        if path.is_none() {
+            return Err(anyhow!("Invalid path, path is none. Downloader."));
+        }
 
-        let path = Path::new(&filename);
-        let left = fs2::available_space(path)?;
+        let path = path.unwrap();
+        let path = Path::new(&path);
 
+
+        let curr_dir = std::env::current_dir()?;
+        let curr_dir_path = curr_dir.clone();
+        let curr_dir_path = curr_dir_path.as_path();
+
+        let dir_path = path.parent().unwrap_or(curr_dir_path);
+        let mut dir = dir_path.to_path_buf();
+
+        if !dir.is_absolute() {
+            let mut buf = PathBuf::new();
+            buf.push(curr_dir);
+            buf.push(dir.clone());
+
+            dir = buf;
+        }
+
+        trace!("Getting available space at {}...", dir.to_str().unwrap());
+        let left = fs2::available_space(dir)?;
+
+        trace!("Left is {} size of file is {}", left, size);
         if left < size {
             eprintln!(
                 "Not enough size on your disk left ({} left, {} needed)",
@@ -101,7 +124,7 @@ impl DownloadWorker {
 
         let i = thread_index;
 
-        let filename = file.filename.clone();
+        let out_path = file.path.clone().unwrap();
         let size = file.size;
         let sender_key = self.sender_key.clone();
         let file_lock_arc = self.file_lock.clone();
@@ -126,7 +149,7 @@ impl DownloadWorker {
                 let keypair = get_curr_keypair().await?;
 
 
-                let uuid_signature = get_signature(&uuid.to_bytes_le().to_vec(), &keypair)?;
+                let uuid_signature = get_signature(&uuid.as_bytes().to_vec(), &keypair)?;
 
                 let base_url = get_base_url().await;
                 let http_protocol = get_web_protocol().await;
@@ -139,8 +162,8 @@ impl DownloadWorker {
                     uuid.to_string(),
                     hex::encode(uuid_signature)
                 );
-                let client = reqwest::Client::new();
 
+                let client = reqwest::Client::new();
                 let response = download_file(&client, url, &tx).await?;
 
                 // Signature is validated in deserialize, so its fine
@@ -152,7 +175,7 @@ impl DownloadWorker {
                 let offset = CHUNK_SIZE_I64 * i as i64;
 
                 trace!("Chunk downloaded. Saving...");
-                let path = Path::new(&filename);
+                let path = Path::new(&out_path);
                 let mut f = OpenOptions::new()
                     .write(true)
                     .create(true)
@@ -180,7 +203,10 @@ impl DownloadWorker {
             let res = to_run().await;
             drop(tx);
 
-            res?;
+            if res.is_err() {
+                eprintln!("Downloader Worker error:");
+                res?;
+            }
             Ok(())
         });
 

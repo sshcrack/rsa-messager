@@ -60,6 +60,10 @@ impl Downloader {
     }
 
     pub async fn initialize(&mut self, max_threads: u64) -> anyhow::Result<()> {
+        if self.info.path.is_none() {
+            return Err(anyhow!("Can not initialize downloader when download path is none."));
+        }
+
         trace!("Waiting for read...");
         let state = self.workers.read().await;
 
@@ -181,6 +185,7 @@ impl Downloader {
     }
 
     pub async fn start_downloading(&self, chunk: u64) -> anyhow::Result<()> {
+        trace!("Waiting to download chunk {}", chunk);
         let mut state = self.workers.write().await;
         let futures = state.iter_mut().map(|e| {
             Box::pin(async {
@@ -214,6 +219,7 @@ impl Downloader {
             ));
         }
 
+        trace!("Starting worker with id {}", chunk);
         let worker = worker.unwrap();
         let res = worker.start(chunk);
         drop(state);

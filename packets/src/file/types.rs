@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -9,6 +11,7 @@ pub struct FileRequest {
 
 #[derive(Debug, Clone)]
 pub struct FileInfo {
+    pub path: Option<PathBuf>,
     pub filename: String,
     pub size: u64,
     pub receiver: Uuid,
