@@ -6,7 +6,7 @@ use log::{debug, trace, warn};
 use openssl::{pkey::Public, rsa::Rsa};
 use packets::{
     consts::{CHUNK_SIZE, ONE_MB_SIZE},
-    file::{processing::{tools::get_max_threads, ready::ChunkReadyMsg}, types::FileInfo, chunk::index::{ChunkByteMessage, ChunkMsg}}, encryption::sign::get_signature, types::ByteMessage,
+    file::{processing::tools::get_max_threads, types::FileInfo, chunk::index::{ChunkByteMessage, ChunkMsg}}, encryption::sign::get_signature,
 };
 use tokio::{
     fs::File,
@@ -14,10 +14,9 @@ use tokio::{
     sync::RwLock,
     task::JoinHandle,
 };
-use tokio_tungstenite::tungstenite::Message;
 use uuid::Uuid;
 
-use crate::{encryption::rsa::encrypt, util::{arcs::{get_curr_keypair, get_base_url}, msg::send_msg}, web::{prefix::get_web_protocol, progress::upload_file}};
+use crate::{encryption::rsa::encrypt, util::arcs::{get_curr_keypair, get_base_url}, web::{prefix::get_web_protocol, progress::upload_file}};
 
 pub type ProgressChannel = Receiver<f32>;
 pub type ArcProgressChannel = Arc<RwLock<ProgressChannel>>;
@@ -153,7 +152,7 @@ impl UploadWorker {
 
                 let encrypted = encrypt(&key, &buf.buffer().to_vec())?;
                 let keypair = get_curr_keypair().await?;
-                let signature = get_signature(&encrypted, &keypair)?;
+                let signature = get_signature(&encrypted.clone(), &keypair)?;
 
                 let base_url = get_base_url().await;
                 let http_protocol = get_web_protocol().await;
@@ -161,13 +160,13 @@ impl UploadWorker {
                 let url = format!("{}//{}/file/upload", http_protocol, base_url);
                 let client = reqwest::Client::new();
 
-                trace!("Uploading chunk {} to {}... {:?} {:?}", i, url, signature, uuid);
                 let body = ChunkMsg {
                     signature,
                     encrypted,
                     uuid,
                     chunk_index: i
                 }.serialize();
+                trace!("Uploading chunk {} to {} with size {}...", i, url, body.len());
 
                 let mut e = File::create("target/chunk.bin").await?;
                 e.write_all(&body).await?;
@@ -178,11 +177,6 @@ impl UploadWorker {
                 upload_file(&client, url, body).await?;
                 tx.send(1 as f32)?;
                 debug!("Worker {} of file {} done.", i, uuid);
-
-                send_msg(Message::Binary(ChunkReadyMsg {
-                    chunk_index: i,
-                    uuid
-                }.serialize())).await?;
                 Ok(())
             };
 

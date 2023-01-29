@@ -73,6 +73,7 @@ pub async fn on_download(
         headers.insert("Content-Length", HeaderValue::from(size));
         headers.insert("Content-Type", HeaderValue::from_str("application/octet-stream")?);
 
+        println!("Returning with size {}",size);
         return Ok(resp) as anyhow::Result<Response>
     };
 

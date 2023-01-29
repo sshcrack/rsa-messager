@@ -9,7 +9,7 @@ use crate::{file::tools::get_uploading_file, utils::tools::send_msg_specific};
 
 pub async fn on_chunk_ready(data: &Vec<u8>, my_id: &Uuid) -> anyhow::Result<()> {
     let msg = ChunkReadyMsg::deserialize(data)?;
-    trace!("ChunkReady: {:?}", msg);
+    trace!("ChunkReady received: {:?}", msg);
 
     let file = get_uploading_file(&msg.uuid).await?;
 
