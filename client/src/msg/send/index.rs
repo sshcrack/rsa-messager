@@ -69,6 +69,8 @@ pub async fn send_msgs() -> anyhow::Result<()> {
             continue;
         }
 
+        if line == "" { continue; }
+
         let rec_got = rec_got.clone().unwrap();
 
 

@@ -27,18 +27,16 @@ where
 {
     let res: anyhow::Result<()> = async move {
         let mut previous: Vec<u8> = Vec::new();
-        let mut signature_size = s2vec(&mut body, USIZE_SIZE, &mut previous).await?;
-        let signature_size = usize_from_vec(&mut signature_size)?;
+        let b_signature_size = s2vec(&mut body, USIZE_SIZE, &mut previous).await?;
+        let signature_size = usize_from_vec(&mut b_signature_size.clone())?;
 
-        
+
         let signature = vec_from_stream(&mut body, signature_size, &mut previous).await?;
-        println!("Signature size {} sig {:?} prev {:?}", signature_size, signature, previous);
-        
-        let mut uuid = s2vec(&mut body, UUID_SIZE, &mut previous).await?;
-        let uuid = uuid_from_vec(&mut uuid)?;
+        let b_uuid = s2vec(&mut body, UUID_SIZE, &mut previous).await?;
+        let uuid = uuid_from_vec(&mut b_uuid.clone())?;
 
-        let mut chunk_index = s2vec(&mut body, U64_SIZE, &mut previous).await?;
-        let chunk_index = u64_from_vec(&mut chunk_index)?;
+        let b_chunk_index = s2vec(&mut body, U64_SIZE, &mut previous).await?;
+        let chunk_index = u64_from_vec(&mut b_chunk_index.clone())?;
 
         trace!("Getting file in upload {}", uuid);
         let file = get_uploading_file(&uuid).await?;
@@ -65,6 +63,10 @@ where
         }
 
         let inner = async {
+            chunk_file.write_all(&b_signature_size).await?;
+            chunk_file.write_all(&signature).await?;
+            chunk_file.write_all(&b_uuid).await?;
+            chunk_file.write_all(&b_chunk_index).await?;
             chunk_file.write_all(&previous).await?;
 
             let mut verifier = Verifier::new(*MSG_DIGEST, &p_key)?;
@@ -84,7 +86,7 @@ where
                 return Err(anyhow!("Chunk is not valid."));
             }
 
-            trace!("Sending chunk ready");
+            trace!("Sending chunk ready with uuid {}", uuid);
             send_msg_specific(file.receiver, Message::binary(ChunkReadyMsg {
                 uuid,
                 chunk_index

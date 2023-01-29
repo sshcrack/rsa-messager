@@ -10,6 +10,7 @@ use crate::util::tools::u64_from_vec;
 use crate::util::{tools::{usize_from_vec, uuid_from_vec}, vec::extract_vec};
 
 
+#[derive(Debug)]
 pub struct ChunkMsg {
     pub signature: Vec<u8>,
     pub encrypted: Vec<u8>,
@@ -39,13 +40,14 @@ impl ChunkByteMessage for ChunkMsg {
         merged.append(&mut b_chunk_index);
         merged.append(&mut b_encrypted.clone());
 
+        trace!("ready Msg is {}", hex::encode(&merged));
         return merged;
     }
 
     fn deserialize(data: &Vec<u8>, pubkey: &Rsa<Public>) -> anyhow::Result<Self> {
         let mut data = data.clone();
 
-        trace!("Parsing error of length {}...", data.len());
+        trace!("Parsing chunk of length {}... data: {}", data.len(), hex::encode(&data));
         let signature_size = usize_from_vec(&mut data)?;
         let signature = extract_vec(0..signature_size, &mut data)?;
 

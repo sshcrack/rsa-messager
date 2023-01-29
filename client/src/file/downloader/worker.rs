@@ -141,12 +141,20 @@ impl DownloadWorker {
                 );
                 let client = reqwest::Client::new();
 
+                trace!("Downloading file...");
                 let response = download_file(&client, url, &tx).await?;
 
                 // Signature is validated in deserialize, so its fine
-                let deserialized = ChunkMsg::deserialize(&response, &sender_key)?;
+                let deserialized = ChunkMsg::deserialize(&response, &sender_key);
+                if deserialized.is_err() {
+                    let e = deserialized.unwrap_err();
+                    eprintln!("Deserialize err: {:?}", e);
+                    return Err(e)
+                }
+                let deserialized = deserialized.unwrap();
                 let encrypted = &deserialized.encrypted;
 
+                trace!("Decrypting cotnents...");
                 let decrypted = decrypt(&keypair, encrypted)?;
 
                 let offset = CHUNK_SIZE_I64 * i as i64;

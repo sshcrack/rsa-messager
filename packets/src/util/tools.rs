@@ -1,5 +1,4 @@
 use anyhow::anyhow;
-use log::trace;
 use uuid::Uuid;
 
 use crate::consts::{UUID_SIZE, U64_SIZE, USIZE_SIZE};
