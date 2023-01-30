@@ -170,9 +170,6 @@ impl UploadWorker {
 
                 let receiver_key = get_pubkey_from_rec(&file.receiver).await?;
 
-                let b_key = key.serialize(&receiver_key)?;
-                trace!("B_KEy {}", hex::encode(b_key.clone()));
-
                 let body = ChunkMsg {
                     signature,
                     encrypted,
@@ -182,13 +179,12 @@ impl UploadWorker {
                 }.serialize(&receiver_key)?;
                 trace!("Uploading chunk {} to {} with size {}...", i, url, body.len());
 
-                let mut e = File::create("target/chunk.bin").await?;
-                e.write_all(&body).await?;
-                e.shutdown().await?;
-
-                trace!("Uploading chunk {}...", i);
-
-                upload_file(&client, url, body).await?;
+                let res = upload_file(&client, url, body).await?;
+                let status = res.status();
+                let e = res.text().await;
+                if status != 200 {
+                    eprintln!("Error uploading file: {}", e.unwrap_or("unknown err".to_string()));
+                }
                 tx.send(1 as f32)?;
                 debug!("Worker {} of file {} done.", i, uuid);
                 Ok(())

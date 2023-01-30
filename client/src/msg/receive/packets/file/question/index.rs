@@ -165,5 +165,6 @@ pub async fn check_accepted(msg: FileQuestionMsg) -> anyhow::Result<bool> {
     state.insert(uuid, downloader);
 
     drop(state);
+    trace!("Done.");
     return Ok(true);
 }

@@ -5,7 +5,6 @@ use openssl::{pkey::PKey, rsa::Rsa, sign::Verifier};
 use packets::{
     consts::{MSG_DIGEST, U64_SIZE, USIZE_SIZE, UUID_SIZE},
     file::processing::ready::ChunkReadyMsg,
-    other::key_iv::KeyIVPair,
     types::ByteMessage,
     util::tools::{u64_from_vec, usize_from_vec, uuid_from_vec},
 };
@@ -50,8 +49,6 @@ where
         let iv_size = usize_from_vec(&mut b_iv_size.clone())?;
 
         let b_iv = s2vec(&mut body, iv_size, &mut previous).await?;
-
-        trace!("B_KEy {}", hex::encode(b_key.clone()));
 
         trace!("Getting file in upload {}", uuid);
         let file = get_uploading_file(&uuid).await?;

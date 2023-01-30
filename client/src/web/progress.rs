@@ -4,7 +4,7 @@ use tokio::sync::RwLock;
 use std::{cmp::min, sync::Arc};
 
 use futures_util::StreamExt;
-use reqwest::Client;
+use reqwest::{Client, Response};
 
 
 pub async fn download_file(
@@ -55,7 +55,7 @@ pub async fn upload_file(
     url: String,
     buf: Vec<u8>,
     //sender: Sender<f32>
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Response> {
     //TODO
     /*
     let arc = Arc::new(RwLock::new(sender));
@@ -78,11 +78,11 @@ pub async fn upload_file(
         drop(state);
     }; */
 
-    client
+    let e = client
         .post(url)
         .body(buf)
         .send()
         .await?;
 
-    return Ok(());
+    return Ok(e);
 }

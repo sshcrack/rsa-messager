@@ -6,7 +6,7 @@ use crate::routes::{
     index::get_index,
 };
 use colorize::AnsiColor;
-use packets::consts::CHUNK_SIZE;
+use packets::consts::{CHUNK_SIZE, ONE_MB_SIZE};
 use warp::Filter;
 
 use super::{info::on_info, list::on_list};
@@ -36,7 +36,7 @@ pub async fn serve_routes(addr: impl Into<SocketAddr>) {
         });
 
     let upload_route = warp::path!("file" / "upload")
-        .and(warp::body::content_length_limit(CHUNK_SIZE))
+        .and(warp::body::content_length_limit(CHUNK_SIZE + 3* ONE_MB_SIZE))
         .and(warp::body::stream())
         .and_then(on_upload);
 

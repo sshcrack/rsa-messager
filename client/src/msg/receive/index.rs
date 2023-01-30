@@ -22,11 +22,14 @@ pub async fn receive_msgs(
 ) -> anyhow::Result<()> {
     while let Some(msg) = rx.next().await {
         let msg = msg?;
-        let res = handle(msg).await;
-        if res.is_err() {
-            eprintln!("Error occurred while processing message packet: ");
-            eprintln!("{}", format!("{:?}", res.unwrap_err()).on_bright_red().black());
-        }
+        println!("Msg received");
+        tokio::spawn(async move {
+            let res = handle(msg).await;
+            if res.is_err() {
+                eprintln!("Error occurred while processing message packet: ");
+                eprintln!("{}", format!("{:?}", res.unwrap_err()).on_bright_red().black());
+            }
+        });
     }
 
     Ok(())
@@ -48,6 +51,7 @@ pub async fn handle(
     }
 
     let mode = mode.unwrap();
+    println!("Received msg mode {}", mode);
     let mut data = decque_to_vec(decque);
 
     if Modes::From.is_indicator(&mode) {
@@ -56,7 +60,9 @@ pub async fn handle(
     }
 
     if Modes::SendFileQuestion.is_indicator(&mode) {
+        println!("On question");
         on_file_question(&mut data).await?;
+        println!("on question end");
         return Ok(());
     }
 
@@ -76,12 +82,16 @@ pub async fn handle(
     }
 
     if Modes::SendFileStartProcessing.is_indicator(&mode) {
+        println!("On processing start");
         on_start_processing(&mut data).await?;
+        println!("On processing end");
         return Ok(());
     }
 
     if Modes::SendFileChunkReady.is_indicator(&mode) {
+        println!("On start ready");
         on_chunk_ready(&mut data).await?;
+        println!("on end ready");
         return Ok(());
     }
 

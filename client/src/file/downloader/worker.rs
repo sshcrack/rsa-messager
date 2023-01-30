@@ -85,10 +85,8 @@ impl DownloadWorker {
             dir = buf;
         }
 
-        trace!("Getting available space at {}...", dir.to_str().unwrap());
         let left = fs2::available_space(dir)?;
 
-        trace!("Left is {} size of file is {}", left, size);
         if left < size {
             eprintln!(
                 "Not enough size on your disk left ({} left, {} needed)",
@@ -192,7 +190,6 @@ impl DownloadWorker {
                     .open(&path)
                     .await?;
 
-                trace!("Writing {} at offset {}", hex::encode(decrypted.clone()), offset);
                 f.seek(SeekFrom::Current(offset)).await?;
                 f.write_all(&decrypted).await?;
 
