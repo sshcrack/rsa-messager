@@ -15,7 +15,7 @@ pub async fn on_send(line: &str) -> anyhow::Result<()> {
     let given_path = Path::new(&given_path);
 
     if !given_path.is_file() {
-        let msg = format!("File {} does not exist.", given_path.to_str().unwrap_or("()"));
+        let msg = format!("File '{}' does not exist.", given_path.to_str().unwrap_or("()"));
         println!("{}", msg.red());
 
         return Ok(());

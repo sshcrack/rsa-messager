@@ -1,0 +1,18 @@
+{
+	"folders": [
+		{
+			"path": "server"
+		},
+		{
+			"path": "client"
+		}
+	],
+	"settings": {
+		"terminal.integrated.env.windows": {
+			"RUST_LOG": "server,tungestenit,packets"
+		},
+		"terminal.integrated.env.linux": {
+			"RUST_LOG": "server,tungestenit,packets"
+		}
+	}
+}

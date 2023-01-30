@@ -1,9 +1,7 @@
 use anyhow::anyhow;
 use uuid::Uuid;
 
-use crate::consts::{UUID_SIZE, U64_SIZE, USIZE_SIZE};
-
-
+use crate::consts::{U64_SIZE, USIZE_SIZE, UUID_SIZE};
 
 pub fn bytes_to_uuid(v: &Vec<u8>) -> anyhow::Result<Uuid> {
     if v.len() != UUID_SIZE {
@@ -36,7 +34,10 @@ pub fn uuid_from_vec(v: &mut Vec<u8>) -> anyhow::Result<Uuid> {
 
 pub fn u64_from_vec(v: &mut Vec<u8>) -> anyhow::Result<u64> {
     if v.len() < U64_SIZE {
-        return Err(anyhow!(format!("Cannot parse u64 as vector is not long enough ({} items)", v.len())));
+        return Err(anyhow!(format!(
+            "Cannot parse u64 as vector is not long enough ({} items)",
+            v.len()
+        )));
     }
 
     let temp = v.splice(0..U64_SIZE, vec![]);
@@ -51,10 +52,12 @@ pub fn u64_from_vec(v: &mut Vec<u8>) -> anyhow::Result<u64> {
     Ok(numb)
 }
 
-
 pub fn usize_from_vec(v: &mut Vec<u8>) -> anyhow::Result<usize> {
     if v.len() < USIZE_SIZE {
-        return Err(anyhow!(format!("Cannot parse usize as vector is not long enough ({} items)", v.len())));
+        return Err(anyhow!(format!(
+            "Cannot parse usize as vector is not long enough ({} items)",
+            v.len()
+        )));
     }
 
     let temp = v.splice(0..USIZE_SIZE, vec![]);

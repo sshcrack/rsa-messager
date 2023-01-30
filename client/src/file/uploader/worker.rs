@@ -1,12 +1,13 @@
 use std::{io::SeekFrom, path::Path, sync::Arc};
 
 use anyhow::anyhow;
+use bytes::{BufMut, BytesMut, Buf};
 use crossbeam_channel::{Receiver, Sender};
 use log::{debug, trace, warn};
 use openssl::{pkey::Public, rsa::Rsa};
 use packets::{
     consts::{CHUNK_SIZE, ONE_MB_SIZE},
-    file::{processing::tools::get_max_threads, types::FileInfo, chunk::index::{ChunkByteMessage, ChunkMsg}}, encryption::sign::get_signature,
+    file::{processing::tools::get_max_chunks, types::FileInfo, chunk::index::ChunkMsg}, encryption::sign::get_signature, other::key_iv::KeyIVPair
 };
 use tokio::{
     fs::File,
@@ -16,7 +17,7 @@ use tokio::{
 };
 use uuid::Uuid;
 
-use crate::{encryption::rsa::encrypt, util::arcs::{get_curr_keypair, get_base_url}, web::{prefix::get_web_protocol, progress::upload_file}};
+use crate::{encryption::rsa::get_pubkey_from_rec, util::arcs::{get_curr_keypair, get_base_url}, web::{prefix::get_web_protocol, progress::upload_file}};
 
 pub type ProgressChannel = Receiver<f32>;
 pub type ArcProgressChannel = Arc<RwLock<ProgressChannel>>;
@@ -53,7 +54,7 @@ impl UploadWorker {
 
         if !path.is_file() {
             eprintln!("Could not send file at {} (does not exist)", filename);
-            return Err(anyhow!("File {} does not exist.", filename));
+            return Err(anyhow!("File '{}' does not exist.", filename));
         }
 
         let metadata = path.metadata()?;
@@ -102,9 +103,9 @@ impl UploadWorker {
         let handle: JoinHandle<anyhow::Result<()>> = tokio::spawn(async move {
             let tx = tx.read().await;
             let to_run = || async {
-                let max_threads = get_max_threads(size);
+                let max_chunks = get_max_chunks(size);
 
-                if max_threads <= 0 {
+                if max_chunks <= 0 {
                     warn!("Max Threads is 0 in index {}", i);
                     return Err(anyhow!("MaxThreads is zero"));
                 }
@@ -112,7 +113,7 @@ impl UploadWorker {
                 trace!(
                     "While loop with i: {} and max_threads {}...",
                     i,
-                    max_threads
+                    max_chunks
                 );
 
                 trace!("Reading file {}...", path.display());
@@ -120,10 +121,14 @@ impl UploadWorker {
                 let mut buf = BufReader::new(f);
                 let seek_to = i64::try_from(CHUNK_SIZE * i)?;
 
-                trace!("Seeking to {}", seek_to);
+                if (seek_to as u64) > size {
+                    trace!("Invalid upload error with index {}", i);
+                    return Err(anyhow!(format!("Can not seek to {} as file size is only {}", seek_to, size)));
+                }
+
                 buf.seek(SeekFrom::Current(seek_to)).await?;
 
-                let is_last_chunk = (i + max_threads) >= max_threads;
+                let is_last_chunk = (i + max_chunks) >= max_chunks;
 
                 let chunk_size_u64 = if is_last_chunk {
                     std::cmp::min(CHUNK_SIZE, size)
@@ -134,38 +139,47 @@ impl UploadWorker {
 
                 let mut chunk = Vec::with_capacity(chunk_size);
 
-                trace!("Reading file with chunk size {} (i: {})", chunk_size, i);
                 let mut bytes_read = 0;
                 while bytes_read < chunk_size {
                     let to_read = std::cmp::min(ONE_MB_SIZE, chunk_size_u64);
                     let to_read = usize::try_from(to_read)?;
-                    let mut small_chunk = Vec::with_capacity(to_read);
+                    let mut small_chunk = BytesMut::with_capacity(to_read);
 
-                    buf.read_exact(&mut small_chunk).await?;
-                    chunk.append(&mut small_chunk);
+                    buf.read_buf(&mut small_chunk).await?;
+                    chunk.append(&mut small_chunk.chunk().to_vec());
 
                     let percentage = (bytes_read as f32) / (chunk_size as f32) * 0.5;
                     tx.send(percentage)?;
 
+                    println!("{}%", percentage * 100 as f32);
                     bytes_read += to_read;
                 }
 
-                let encrypted = encrypt(&key, &buf.buffer().to_vec())?;
+                let key = KeyIVPair::generate()?;
+                let encrypted = key.encrypt(&chunk.to_vec())?;
+
                 let keypair = get_curr_keypair().await?;
                 let signature = get_signature(&encrypted.clone(), &keypair)?;
 
+                trace!("Base...");
                 let base_url = get_base_url().await;
                 let http_protocol = get_web_protocol().await;
 
                 let url = format!("{}//{}/file/upload", http_protocol, base_url);
                 let client = reqwest::Client::new();
 
+                let receiver_key = get_pubkey_from_rec(&file.receiver).await?;
+
+                let b_key = key.serialize(&receiver_key)?;
+                trace!("B_KEy {}", hex::encode(b_key.clone()));
+
                 let body = ChunkMsg {
                     signature,
                     encrypted,
                     uuid,
-                    chunk_index: i
-                }.serialize();
+                    chunk_index: i,
+                    key
+                }.serialize(&receiver_key)?;
                 trace!("Uploading chunk {} to {} with size {}...", i, url, body.len());
 
                 let mut e = File::create("target/chunk.bin").await?;

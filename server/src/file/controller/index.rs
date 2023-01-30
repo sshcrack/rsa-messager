@@ -1,5 +1,5 @@
 use log::trace;
-use packets::{file::{types::FileInfo, processing::{start::FileStartProcessing, tools::get_max_threads}}, types::ByteMessage};
+use packets::{file::{types::FileInfo, processing::{start::FileStartProcessing, tools::get_max_chunks}}, types::ByteMessage};
 use uuid::Uuid;
 use warp::ws::Message;
 
@@ -15,7 +15,7 @@ pub struct Controller {
 
 impl Controller {
     pub async fn new(id: &Uuid, file: FileInfo) -> anyhow::Result<Self> {
-        let threads = get_max_threads(file.size);
+        let threads = get_max_chunks(file.size);
         let id = id.clone();
 
         trace!("Sending start processing packet...");

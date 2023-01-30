@@ -8,7 +8,7 @@ use packets::{
     file::{
         question::{ index::FileQuestionMsg, reply::FileQuestionReplyMsg },
         types::FileInfo,
-        processing::tools::get_max_threads,
+        processing::tools::get_max_chunks,
     },
     types::ByteMessage,
 };
@@ -86,6 +86,7 @@ pub async fn check_accepted(msg: FileQuestionMsg) -> anyhow::Result<bool> {
                 path = Some(try_path.to_path_buf());
                 break;
             }
+            continue;
         }
 
         if try_path.is_dir() {
@@ -155,7 +156,7 @@ pub async fn check_accepted(msg: FileQuestionMsg) -> anyhow::Result<bool> {
 
     trace!("Initializing downloader...");
     let mut downloader = Downloader::new(&uuid, key, &info);
-    downloader.initialize(get_max_threads(info.size)).await?;
+    downloader.initialize(get_max_chunks(info.size)).await?;
 
     trace!("Aquiring lock on file_downloads...");
     let mut state = FILE_DOWNLOADS.write().await;

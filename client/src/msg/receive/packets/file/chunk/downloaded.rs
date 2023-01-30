@@ -1,11 +1,11 @@
 use colored::Colorize;
 use packets::{
-    file:: processing::{abort::ChunkAbortMsg, downloaded::ChunkDownloadedMsg},
+    file::{ processing::{abort::ChunkAbortMsg, downloaded::ChunkDownloadedMsg}, types::FileInfo},
     types::ByteMessage,
 };
 use log::trace;
 use tokio_tungstenite::tungstenite::Message;
-use crate::util::{consts::FILE_UPLOADS, msg::send_msg};
+use crate::util::{consts::FILE_UPLOADS, msg::send_msg, tools::uuid_to_name};
 
 pub async fn on_chunk_downloaded(data: &mut Vec<u8>) -> anyhow::Result<()> {
     let msg = ChunkDownloadedMsg::deserialize(data)?;
@@ -23,9 +23,19 @@ pub async fn on_chunk_downloaded(data: &mut Vec<u8>) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let downloader = uploader.unwrap();
-    downloader.start_upload(msg.chunk_index).await?;
+    let uploader = uploader.unwrap();
+    let max_chunks = uploader.get_max_chunks();
+    let new_chunk = msg.chunk_index +1;
 
+    if new_chunk >= max_chunks {
+        let FileInfo {filename, receiver, ..} = uploader.get_file_info();
+        let receiver_name = uuid_to_name(receiver).await?;
+
+        println!("{}", format!("File '{}' was successfully sent to {}.", filename.yellow(), receiver_name.blue().bold()).green());
+        return Ok(());
+    }
+
+    uploader.start_upload(new_chunk).await?;
     drop(state);
 
     Ok(())

@@ -5,6 +5,7 @@ use packets::communication::to::ToMsg;
 use packets::initialize::pubkey::PubkeyMsg;
 use packets::types::ByteMessage;
 use packets::util::modes::Modes;
+use packets::util::rsa::encrypt_rsa;
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::encryption::rsa::get_pubkey_from_rec;
@@ -12,7 +13,6 @@ use crate::msg::send::actions::index::on_command;
 use crate::util::arcs::get_curr_keypair;
 use crate::util::consts::{SEND_DISABLED, RECEIVER, RECEIVE_INPUT, RECEIVE_TX};
 use crate::util::msg::{send_msg, print_from_msg};
-use crate::encryption::rsa::encrypt;
 pub async fn send_msgs() -> anyhow::Result<()> {
     let keypair = get_curr_keypair().await?;
 
@@ -77,7 +77,7 @@ pub async fn send_msgs() -> anyhow::Result<()> {
 
 
         let key = get_pubkey_from_rec(&rec_got).await?;
-        let encrypted = encrypt(&key, &line.as_bytes().to_vec())?;
+        let encrypted = encrypt_rsa(&key, &line.as_bytes().to_vec())?;
 
         print_from_msg("you", &line);
 

@@ -4,19 +4,23 @@ use log::trace;
 use openssl::{pkey::PKey, rsa::Rsa, sign::Verifier};
 use packets::{
     consts::{MSG_DIGEST, U64_SIZE, USIZE_SIZE, UUID_SIZE},
-    util::tools::{u64_from_vec, usize_from_vec, uuid_from_vec}, file::processing::ready::ChunkReadyMsg, types::ByteMessage,
+    file::processing::ready::ChunkReadyMsg,
+    other::key_iv::KeyIVPair,
+    types::ByteMessage,
+    util::tools::{u64_from_vec, usize_from_vec, uuid_from_vec},
 };
 use tokio::{
-    fs::{File, remove_file},
+    fs::{remove_file, File},
     io::AsyncWriteExt,
 };
-use warp::{hyper::StatusCode, reply, Buf, ws::Message};
+use warp::{hyper::StatusCode, reply, ws::Message, Buf};
 
 use crate::{
     file::tools::{get_chunk_file, get_uploading_file},
     utils::{
         arcs::get_user,
-        stream::{s2vec, vec_from_stream}, tools::send_msg_specific,
+        stream::{s2vec, vec_from_stream},
+        tools::send_msg_specific,
     },
 };
 
@@ -30,13 +34,24 @@ where
         let b_signature_size = s2vec(&mut body, USIZE_SIZE, &mut previous).await?;
         let signature_size = usize_from_vec(&mut b_signature_size.clone())?;
 
-
         let signature = vec_from_stream(&mut body, signature_size, &mut previous).await?;
         let b_uuid = s2vec(&mut body, UUID_SIZE, &mut previous).await?;
         let uuid = uuid_from_vec(&mut b_uuid.clone())?;
 
         let b_chunk_index = s2vec(&mut body, U64_SIZE, &mut previous).await?;
         let chunk_index = u64_from_vec(&mut b_chunk_index.clone())?;
+
+        let b_key_size = s2vec(&mut body, USIZE_SIZE, &mut previous).await?;
+        let key_size = usize_from_vec(&mut b_key_size.clone())?;
+
+        let b_key = s2vec(&mut body, key_size, &mut previous).await?;
+
+        let b_iv_size = s2vec(&mut body, USIZE_SIZE, &mut previous).await?;
+        let iv_size = usize_from_vec(&mut b_iv_size.clone())?;
+
+        let b_iv = s2vec(&mut body, iv_size, &mut previous).await?;
+
+        trace!("B_KEy {}", hex::encode(b_key.clone()));
 
         trace!("Getting file in upload {}", uuid);
         let file = get_uploading_file(&uuid).await?;
@@ -56,7 +71,7 @@ where
 
         let e = std::env::current_dir()?;
         let e = e.join(file_path.clone());
-        let e =  e.to_str();
+        let e = e.to_str();
 
         if e.is_some() {
             trace!("Writing chunk at {}", e.unwrap());
@@ -67,6 +82,10 @@ where
             chunk_file.write_all(&signature).await?;
             chunk_file.write_all(&b_uuid).await?;
             chunk_file.write_all(&b_chunk_index).await?;
+            chunk_file.write_all(&b_key_size).await?;
+            chunk_file.write_all(&b_key).await?;
+            chunk_file.write_all(&b_iv_size).await?;
+            chunk_file.write_all(&b_iv).await?;
             chunk_file.write_all(&previous).await?;
 
             let mut verifier = Verifier::new(*MSG_DIGEST, &p_key)?;
@@ -87,10 +106,11 @@ where
             }
 
             trace!("Sending chunk ready with uuid {}", uuid);
-            send_msg_specific(file.receiver, Message::binary(ChunkReadyMsg {
-                uuid,
-                chunk_index
-            }.serialize())).await?;
+            send_msg_specific(
+                file.receiver,
+                Message::binary(ChunkReadyMsg { uuid, chunk_index }.serialize()),
+            )
+            .await?;
             Ok(()) as anyhow::Result<()>
         };
 

@@ -1,12 +1,13 @@
 use std::{collections::HashMap, ops::Add, sync::Arc, fmt::Write};
 
 use anyhow::anyhow;
+use colored::Colorize;
 use crossbeam_channel::{Receiver, Sender};
 use futures_util::future::select_all;
 use indicatif::{ProgressBar, ProgressStyle, ProgressState};
 use log::{trace, warn};
 use openssl::{pkey::Public, rsa::Rsa};
-use packets::file::types::FileInfo;
+use packets::file::{types::FileInfo, processing::tools::get_max_chunks};
 use tokio::{
     sync::{Mutex, RwLock},
     task::JoinHandle,
@@ -59,7 +60,7 @@ impl Downloader {
         };
     }
 
-    pub async fn initialize(&mut self, max_threads: u64) -> anyhow::Result<()> {
+    pub async fn initialize(&mut self, max_chunks: u64) -> anyhow::Result<()> {
         if self.info.path.is_none() {
             return Err(anyhow!("Can not initialize downloader when download path is none."));
         }
@@ -73,7 +74,7 @@ impl Downloader {
         }
         drop(state);
 
-        let to_spawn = std::cmp::min(CONCURRENT_THREADS, max_threads);
+        let to_spawn = std::cmp::min(CONCURRENT_THREADS, max_chunks);
 
         self.threads = Some(to_spawn);
         trace!("Spawning {} workers", to_spawn);
@@ -236,6 +237,7 @@ impl Downloader {
         let prog_arc = self.progress.clone();
         let tx_arc = self.update_tx.clone();
         let chunks_arc = self.chunks_completed.clone();
+        let file_arc = Arc::new(RwLock::new(self.info.clone()));
 
         let e = tokio::spawn(async move {
             let rec_state = rec.read().await;
@@ -252,7 +254,7 @@ impl Downloader {
                 }
 
                 if prog == 1.0 {
-                    Downloader::on_worker_done(&chunks_arc).await;
+                    Downloader::on_worker_done(&chunks_arc, &file_arc).await;
                 }
                 drop(tx);
                 drop(state);
@@ -264,9 +266,18 @@ impl Downloader {
         return Ok(e)
     }
 
-    async fn on_worker_done(chunks_completed: &Arc<RwLock<u64>>) {
+    async fn on_worker_done(chunks_completed: &Arc<RwLock<u64>>, file_arc: &Arc<RwLock<FileInfo>>) {
         let mut s = chunks_completed.write().await;
         *s = s.add(1 as u64);
+
+        let curr_completed = s.clone();
+        drop(s);
+
+        let s = file_arc.read().await;
+        let max_chunks = get_max_chunks(s.size);
+        if curr_completed >= max_chunks {
+            println!("{}", format!("File '{}' has been downloaded successfully.", s.filename.yellow()).green());
+        }
 
         drop(s);
     }

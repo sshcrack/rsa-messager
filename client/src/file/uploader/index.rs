@@ -1,15 +1,19 @@
-use std::{sync::Arc, collections::HashMap, ops::Add};
+use std::{collections::HashMap, fmt::Write, ops::Add, sync::Arc};
 
 use anyhow::anyhow;
-use crossbeam_channel::{ Receiver, Sender};
+use crossbeam_channel::{Receiver, Sender};
 use futures_util::future::select_all;
+use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use log::{trace, warn};
 use openssl::{pkey::Public, rsa::Rsa};
-use packets::file::types::FileInfo;
-use tokio::{sync::{RwLock, Mutex}, task::JoinHandle};
+use packets::file::{processing::tools::get_max_chunks, types::FileInfo};
+use tokio::{
+    sync::{Mutex, RwLock},
+    task::JoinHandle,
+};
 use uuid::Uuid;
 
-use crate::util::consts::CONCURRENT_THREADS;
+use crate::util::{consts::CONCURRENT_THREADS, tools::get_avg};
 
 use super::worker::UploadWorker;
 
@@ -28,7 +32,8 @@ pub struct Uploader {
 
     update_tx: Arc<RwLock<Sender<bool>>>,
     update_rx: Arc<RwLock<Receiver<bool>>>,
-    update_thread: Arc<Mutex<Option<JoinHandle<()>>>>
+    update_thread: Arc<Mutex<Option<JoinHandle<()>>>>,
+    progress_bar: Arc<RwLock<Option<ProgressBar>>>,
 }
 
 impl Uploader {
@@ -45,13 +50,16 @@ impl Uploader {
             key,
             update_rx: Arc::new(RwLock::new(rx)),
             update_tx: Arc::new(RwLock::new(tx)),
-            update_thread: Arc::new(Mutex::new(None))
-        }
+            update_thread: Arc::new(Mutex::new(None)),
+            progress_bar: Arc::new(RwLock::new(None)),
+        };
     }
 
     pub async fn start(&mut self, max_threads: u64) -> anyhow::Result<()> {
         if self.info.path.is_none() {
-            return Err(anyhow!("Can not start uploader when download path is none."));
+            return Err(anyhow!(
+                "Can not start uploader when download path is none."
+            ));
         }
 
         trace!("Waiting for read...");
@@ -66,9 +74,10 @@ impl Uploader {
         let to_spawn = std::cmp::min(CONCURRENT_THREADS, max_threads);
 
         self.threads = Some(to_spawn);
-        trace!("Spawning {} workers" , to_spawn);
+        trace!("Spawning {} workers", to_spawn);
         let mut state = self.workers.write().await;
         for i in 0..to_spawn {
+            trace!("Spawning upload worker with Thread_Indx {}", i);
             let mut worker = UploadWorker::new(i, self.uuid, self.key.clone(), self.info.clone())?;
 
             let e = worker.start(i);
@@ -99,7 +108,7 @@ impl Uploader {
                     let tx = temp1.read().await;
 
                     state.insert(index, prog);
-                    let e =tx.send(true);
+                    let e = tx.send(true);
                     if e.is_err() {
                         warn!("Could not send update: {}", e.unwrap_err());
                     }
@@ -112,7 +121,7 @@ impl Uploader {
                     }
                     drop(tx);
                     drop(state);
-                };
+                }
                 trace!("Upload worker {} finished.", index);
             });
         }
@@ -140,10 +149,22 @@ impl Uploader {
         let spawned = spawned.unwrap();
         let spawned = usize::try_from(spawned)?;
 
+        let max_size = self.info.size;
+        let pb = ProgressBar::new(max_size);
+        pb.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")
+        .unwrap()
+        .with_key("eta", |state: &ProgressState, w: &mut dyn Write| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap())
+        .progress_chars("#>-"));
+
+        self.progress_bar.write().await.replace(pb);
+
+        let pb_arc = self.progress_bar.clone();
         let e = tokio::spawn(async move {
             let state = temp.read().await;
             while let Ok(should_run) = state.recv() {
-                if !should_run  { break; }
+                if !should_run {
+                    break;
+                }
 
                 let prog = temp2.read().await;
 
@@ -153,7 +174,22 @@ impl Uploader {
                 let mut percentages: Vec<f32> = prog.iter().map(|e| e.1.clone()).collect();
                 for _ in 0..left {
                     percentages.push(0 as f32);
-                };
+                }
+
+                let avg = get_avg(&percentages);
+                if avg.is_err() {
+                    warn!("Could not get avg: {}", avg.unwrap_err());
+                    continue;
+                }
+
+                let avg = avg.unwrap();
+                let curr = std::cmp::min(max_size, (avg * (max_size as f32)).floor() as u64);
+
+                let state = pb_arc.read().await;
+                if state.is_some() {
+                    let pb = state.as_ref().unwrap();
+                    pb.set_position(curr);
+                }
 
                 drop(prog);
             }
@@ -174,18 +210,19 @@ impl Uploader {
 
     pub async fn start_upload(&self, chunk: u64) -> anyhow::Result<()> {
         let mut state = self.workers.write().await;
-        let futures = state.iter_mut()
-            .map(|e| Box::pin(async {
+        let futures = state.iter_mut().map(|e| {
+            Box::pin(async {
                 let res = e.wait_for_end().await;
                 if res.is_err() {
                     eprintln!("Error when waiting for end: {}", res.unwrap_err());
                     return None;
                 }
                 return Some(e.get_working_id());
-            }));
+            })
+        });
 
         let selected = select_all(futures);
-        let (available_worker_id,..) = selected.await;
+        let (available_worker_id, ..) = selected.await;
         //TODO maybe abort other futures?
 
         if available_worker_id.is_none() {
@@ -206,35 +243,15 @@ impl Uploader {
         let res = worker.start(chunk);
         drop(state);
 
-
         res?;
         Ok(())
     }
 
-/* just for debugging purposes
-    pub async fn wait_for_workers(&mut self) -> anyhow::Result<()> {
-        println!("Waiting for state of workers...");
-        let mut state = self.workers.write().await;
-        let total = state.len();
+    pub fn get_max_chunks(&self) -> u64 {
+        return get_max_chunks(self.info.size);
+    }
 
-        println!("Waiting for {} workers...", total);
-        let futures = state
-            .iter_mut()
-            .map(|worker| worker.wait_for_end());
-
-        trace!("Joining {} futures...", total);
-        let (workers, update) = join(try_join_all(futures), self.print_updates()).await;
-        drop(state);
-
-        let update = update?;
-        update.abort();
-
-        let state = self.update_tx.read().await;
-        state.send(false)?;
-        drop(state);
-
-        workers?;
-        return Ok(());
-    } */
-
+    pub fn get_file_info(&self) -> FileInfo {
+        return self.info.clone();
+    }
 }

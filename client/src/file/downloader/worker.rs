@@ -1,4 +1,8 @@
-use std::{io::SeekFrom, path::{Path, PathBuf}, sync::Arc};
+use std::{
+    io::SeekFrom,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use anyhow::anyhow;
 use crossbeam_channel::{Receiver, Sender};
@@ -6,11 +10,13 @@ use log::{debug, trace, warn};
 use openssl::{pkey::Public, rsa::Rsa};
 use packets::{
     consts::CHUNK_SIZE_I64,
+    encryption::sign::get_signature,
     file::{
-        chunk::index::{ChunkByteMessage, ChunkMsg},
-        processing::{downloaded::ChunkDownloadedMsg, tools::get_max_threads},
+        chunk::index::ChunkMsg,
+        processing::{downloaded::ChunkDownloadedMsg, tools::get_max_chunks},
         types::FileInfo,
-    }, types::ByteMessage, encryption::sign::get_signature,
+    },
+    types::ByteMessage,
 };
 use tokio::{
     fs::OpenOptions,
@@ -22,7 +28,6 @@ use tokio_tungstenite::tungstenite::Message;
 use uuid::Uuid;
 
 use crate::{
-    encryption::rsa::decrypt,
     util::{
         arcs::{get_base_url, get_curr_keypair},
         msg::send_msg,
@@ -64,7 +69,6 @@ impl DownloadWorker {
 
         let path = path.unwrap();
         let path = Path::new(&path);
-
 
         let curr_dir = std::env::current_dir()?;
         let curr_dir_path = curr_dir.clone();
@@ -132,7 +136,7 @@ impl DownloadWorker {
         let handle: JoinHandle<anyhow::Result<()>> = tokio::spawn(async move {
             let tx = tx.read().await;
             let to_run = || async {
-                let max_threads = get_max_threads(size);
+                let max_threads = get_max_chunks(size);
 
                 if max_threads <= 0 {
                     warn!("Max Threads is 0 in index {}", i);
@@ -148,14 +152,13 @@ impl DownloadWorker {
                 let file_lock = file_lock_arc.lock().await;
                 let keypair = get_curr_keypair().await?;
 
-
                 let uuid_signature = get_signature(&uuid.as_bytes().to_vec(), &keypair)?;
 
                 let base_url = get_base_url().await;
                 let http_protocol = get_web_protocol().await;
 
                 let url = format!(
-                    "{}//{}/file/download?i={}&uuid={}&signature={}",
+                    "{}//{}/file/download?index={}&uuid={}&signature={}",
                     http_protocol,
                     base_url,
                     i,
@@ -163,21 +166,21 @@ impl DownloadWorker {
                     hex::encode(uuid_signature)
                 );
 
+                trace!("Downloading with url {}", url);
                 let client = reqwest::Client::new();
                 let response = download_file(&client, url, &tx).await?;
 
                 // Signature is validated in deserialize, so its fine
-                let deserialized = ChunkMsg::deserialize(&response, &sender_key);
+                let deserialized = ChunkMsg::deserialize(&response, &sender_key, &keypair);
                 if deserialized.is_err() {
                     let e = deserialized.unwrap_err();
                     eprintln!("Deserialize err: {:?}", e);
-                    return Err(e)
+                    return Err(e);
                 }
                 let deserialized = deserialized.unwrap();
                 let encrypted = &deserialized.encrypted;
 
-                trace!("Decrypting cotnents...");
-                let decrypted = decrypt(&keypair, encrypted)?;
+                let decrypted = deserialized.key.decrypt(encrypted)?;
 
                 let offset = CHUNK_SIZE_I64 * i as i64;
 
@@ -189,6 +192,7 @@ impl DownloadWorker {
                     .open(&path)
                     .await?;
 
+                trace!("Writing {} at offset {}", hex::encode(decrypted.clone()), offset);
                 f.seek(SeekFrom::Current(offset)).await?;
                 f.write_all(&decrypted).await?;
 
@@ -202,7 +206,8 @@ impl DownloadWorker {
                         uuid,
                     }
                     .serialize(),
-                )).await?;
+                ))
+                .await?;
                 debug!("Worker {} of file {} done.", i, uuid);
                 Ok(())
             };
