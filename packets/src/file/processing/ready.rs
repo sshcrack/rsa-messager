@@ -17,7 +17,6 @@ impl ByteMessage for ChunkReadyMsg {
         merged.append(&mut self.uuid.as_bytes().to_vec());
         merged.append(&mut b_chunk_index);
 
-        trace!("serialize msg {}", hex::encode(&merged));
         return Modes::SendFileChunkReady.get_send(&merged);
     }
 

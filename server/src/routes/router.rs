@@ -29,7 +29,6 @@ pub async fn serve_routes(addr: impl Into<SocketAddr>) {
         .and(warp::ws())
         .map(|ws: warp::ws::Ws| {
             // This will call our function if the handshake succeeds.
-
             ws.on_upgrade(move |socket| {
                 return user_connected(socket);
             })

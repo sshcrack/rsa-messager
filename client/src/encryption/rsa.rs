@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use openssl::pkey::{Private, Public};
-use openssl::rsa::{Padding, Rsa};
+use openssl::rsa::Rsa;
 use uuid::Uuid;
 
 use crate::web::user_info::get_user_info;

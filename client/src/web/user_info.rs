@@ -1,27 +1,41 @@
 use anyhow::anyhow;
+use log::trace;
 use uuid::Uuid;
 
-use crate::util::{consts::BASE_URL, types::UserInfoBasic};
+use crate::{
+    util::{arcs::get_base_url, types::UserInfoBasic},
+    web::prefix::get_web_protocol,
+};
 
 pub async fn get_user_info(uuid: &Uuid) -> anyhow::Result<UserInfoBasic> {
-    let state = BASE_URL.read().await;
+    let uuid = uuid.clone();
+    let e = tokio::spawn(async move {
+        let protocol = get_web_protocol().await;
+        let base = get_base_url().await;
 
-    let base = state.to_string();
-    drop(state);
+        let info_url = format!("{}//{}/info?id={}", protocol, base, uuid.to_string());
 
-    let info_url = format!("http://{}/info?id={}", base, uuid.to_string());
+        trace!("Requesting user info from {}...", info_url);
+        let resp = surf::get(info_url.to_string()).await;
 
-    let client = reqwest::Client::new();
-    let resp = client.get(info_url.to_string()).send().await;
+        if resp.is_err() {
+            eprintln!("Could not fetch from {}", info_url);
+            return Err(anyhow!(resp.unwrap_err()));
+        }
 
-    if resp.is_err() {
-        eprintln!("Could not fetch from {}", info_url);
-        return Err(anyhow!(resp.unwrap_err()));
-    }
+        let mut resp = resp.unwrap();
+        trace!("Resp parse text");
+        let text = resp.body_string().await;
+        if text.is_err() {
+            return Err(text.unwrap_err().into_inner());
+        }
 
-    let resp = resp.unwrap();
-    let text = resp.text().await?;
-    let json: UserInfoBasic = serde_json::from_str(&text)?;
+        let text = text.unwrap();
+        let json: UserInfoBasic = serde_json::from_str(&text)?;
 
-    return Ok(json);
+        trace!("Done.");
+        return Ok(json);
+    });
+
+    return e.await?;
 }

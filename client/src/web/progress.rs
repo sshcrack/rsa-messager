@@ -1,57 +1,71 @@
 use anyhow::anyhow;
 use crossbeam_channel::Sender;
-use tokio::sync::RwLock;
+use futures_util::io::BufReader;
+use futures_util::AsyncBufReadExt;
+use surf::Response;
 use std::{cmp::min, sync::Arc};
+use tokio::sync::RwLock;
 
-use futures_util::StreamExt;
-use reqwest::{Client, Response};
-
-
-pub async fn download_file(
-    client: &Client,
-    url: String,
-    sender: &Sender<f32>
-) -> anyhow::Result<Vec<u8>> {
+pub async fn download_file(url: String, sender: &Sender<f32>) -> anyhow::Result<Vec<u8>> {
     let arc = Arc::new(RwLock::new(sender));
 
     // Reqwest setup
-    let res = client
-        .get(url.clone())
-        .send()
+    let res = surf::get(url.clone())
         .await
         .or(Err(anyhow!(format!("Failed to GET from '{}'", &url))))?;
-    let total_size = res
-        .content_length()
-        .ok_or(anyhow!(format!("Failed to get content length from '{}'", &url)))?;
+    let total_size = res.header("Content-Length");
+    if total_size.is_none() {
+        return Err(anyhow!(format!(
+            "Failed to get content length from '{}'",
+            &url
+        )));
+    }
 
-    // download chunks
+    let total_size = total_size.unwrap();
+    let total_size = total_size.get(0);
+    if total_size.is_none() {
+        return Err(anyhow!(format!(
+            "Failed to get content length from '{}'",
+            &url
+        )));
+    }
+
+    let total_size = total_size.unwrap();
+    println!("Parsing size '{}' to u64", total_size);
+    let total_size = total_size.to_string().parse::<u64>()?;
+
     let mut buffer = Vec::new();
+    let stream = BufReader::new(res);
+    let arc_stream = Arc::new(RwLock::new(stream));
+
     let mut downloaded: u64 = 0;
-    let mut stream = res.bytes_stream();
 
     let state = arc.read().await;
-    while let Some(item) = stream.next().await {
-        if item.is_err() {
-            //TODO maybe useless drop?
-            drop(state);
-            return Err(item.unwrap_err().into());
+    loop {
+        let mut buf_state = arc_stream.write().await;
+        let mut chunk = buf_state.fill_buf().await?.to_vec();
+        if chunk.len() <= 0 {
+            break;
         }
 
-        let mut chunk = item?.to_vec();
+        drop(buf_state);
+        let mut buf_state = arc_stream.write().await;
+
+        buf_state.consume_unpin(chunk.len());
+        drop(buf_state);
+
         buffer.append(&mut chunk);
 
         let new = min(downloaded + (chunk.len() as u64), total_size);
         downloaded = new;
         state.send((new as f32) / (total_size as f32))?;
     }
-
     //TODO maybe useless drop?
     drop(state);
     return Ok(buffer);
 }
 
 pub async fn upload_file(
-    client: &Client,
     url: String,
     buf: Vec<u8>,
     //sender: Sender<f32>
@@ -78,11 +92,13 @@ pub async fn upload_file(
         drop(state);
     }; */
 
-    let e = client
-        .post(url)
-        .body(buf)
-        .send()
-        .await?;
+    let e = surf::post(url).body(buf).send().await;
+    if e.is_err() {
+        let err = e.unwrap_err();
+        let err: anyhow::Error = err.into_inner();
 
-    return Ok(e);
+        return Err(err);
+    }
+
+    return Ok(e.unwrap());
 }

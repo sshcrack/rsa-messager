@@ -1,5 +1,3 @@
-use std::error::Error;
-use std::fmt;
 use std::process::exit;
 
 use anyhow::anyhow;
@@ -22,23 +20,6 @@ mod msg;
 mod util;
 mod web;
 mod file;
-
-#[derive(Debug)]
-struct ReqwestError {
-    orig: reqwest::Error,
-}
-
-impl fmt::Display for ReqwestError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "SuperError is here!")
-    }
-}
-
-impl Error for ReqwestError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        Some(&self.orig)
-    }
-}
 
 #[tokio::main]
 async fn main() {

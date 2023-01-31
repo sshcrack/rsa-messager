@@ -102,12 +102,12 @@ where
                 return Err(anyhow!("Chunk is not valid."));
             }
 
-            trace!("Sending chunk ready with uuid {}", uuid);
             send_msg_specific(
                 file.receiver,
                 Message::binary(ChunkReadyMsg { uuid, chunk_index }.serialize()),
             )
             .await?;
+            trace!("Sent ready msg to {}", file.receiver);
             Ok(()) as anyhow::Result<()>
         };
 

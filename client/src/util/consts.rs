@@ -6,7 +6,7 @@ use lazy_static::lazy_static;
 
 use super::types::*;
 
-pub const CONCURRENT_THREADS: u64 = 64;
+pub const CONCURRENT_THREADS: u64 = 13;
 
 lazy_static! {
     pub static ref BASE_URL: BaseUrl = Arc::new(RwLock::new("".to_string()));
@@ -26,5 +26,4 @@ lazy_static! {
     pub static ref PENDING_FILES: PendingFiles = PendingFiles::default();
     pub static ref FILE_UPLOADS: FileUploads = FileUploads::default();
     pub static ref FILE_DOWNLOADS: FileDownloads = FileDownloads::default();
-
 }

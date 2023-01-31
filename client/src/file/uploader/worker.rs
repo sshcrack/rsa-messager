@@ -1,7 +1,7 @@
 use std::{io::SeekFrom, path::Path, sync::Arc};
 
 use anyhow::anyhow;
-use bytes::{BufMut, BytesMut, Buf};
+use bytes::{BytesMut, Buf};
 use crossbeam_channel::{Receiver, Sender};
 use log::{debug, trace, warn};
 use openssl::{pkey::Public, rsa::Rsa};
@@ -11,13 +11,13 @@ use packets::{
 };
 use tokio::{
     fs::File,
-    io::{AsyncReadExt, AsyncSeekExt, BufReader, AsyncWriteExt},
+    io::{AsyncReadExt, AsyncSeekExt, BufReader},
     sync::RwLock,
     task::JoinHandle,
 };
 use uuid::Uuid;
 
-use crate::{encryption::rsa::get_pubkey_from_rec, util::arcs::{get_curr_keypair, get_base_url}, web::{prefix::get_web_protocol, progress::upload_file}};
+use crate::{util::arcs::{get_curr_keypair, get_base_url}, web::{prefix::get_web_protocol, progress::upload_file}};
 
 pub type ProgressChannel = Receiver<f32>;
 pub type ArcProgressChannel = Arc<RwLock<ProgressChannel>>;
@@ -33,15 +33,16 @@ pub struct UploadWorker {
     thread: Option<JoinHandle<anyhow::Result<()>>>,
     running: bool,
     tx: ArcProgressTX,
-    pub progress_channel: ArcProgressChannel,
-    key: Rsa<Public>,
+    receiver_key: Rsa<Public>,
+    pub curr_chunk: Arc<RwLock<Option<u64>>>
 }
 
 impl UploadWorker {
     pub fn new(
         worker_id: u64,
         uuid: Uuid,
-        key: Rsa<Public>,
+        receiver_key: Rsa<Public>,
+        progress_channel: ArcProgressTX,
         file: FileInfo,
     ) -> anyhow::Result<UploadWorker> {
         let FileInfo { filename, size,path, .. } = file.clone();
@@ -67,40 +68,43 @@ impl UploadWorker {
             return Err(anyhow!("Size of file does not match with metadata"));
         }
 
-        let (tx, rx) = crossbeam_channel::unbounded();
-        let arc = Arc::new(RwLock::new(rx));
-        let arc_tx = Arc::new(RwLock::new(tx));
-
         return Ok(UploadWorker {
             worker_id,
             file,
             uuid,
             thread: None,
-            tx: arc_tx,
-            progress_channel: arc,
+            tx: progress_channel,
             running: false,
-            key,
+            receiver_key,
+            curr_chunk: Arc::new(RwLock::new(None))
         });
     }
 
-    fn spawn_thread(&self, thread_index: u64) -> anyhow::Result<JoinHandle<anyhow::Result<()>>> {
+    async fn spawn_thread(&self, chunk_index: u64) -> anyhow::Result<JoinHandle<anyhow::Result<()>>> {
         trace!(
             "Spawning new worker with i: {} uuid: {}",
-            thread_index,
+            chunk_index,
             self.uuid
         );
 
         let file = self.file.clone();
         let tx = self.tx.clone();
+        let curr_chunk_arc = self.curr_chunk.clone();
         let uuid = self.uuid.clone();
 
-        let i = thread_index;
+        let i = chunk_index;
 
         let path = file.path.unwrap();
         let size = file.size;
-        let key = self.key.clone();
+        let receiver_key = self.receiver_key.clone();
+
+        let mut state = self.curr_chunk.write().await;
+        state.replace(chunk_index);
+
+        drop(state);
 
         let handle: JoinHandle<anyhow::Result<()>> = tokio::spawn(async move {
+
             let tx = tx.read().await;
             let to_run = || async {
                 let max_chunks = get_max_chunks(size);
@@ -151,7 +155,6 @@ impl UploadWorker {
                     let percentage = (bytes_read as f32) / (chunk_size as f32) * 0.5;
                     tx.send(percentage)?;
 
-                    println!("{}%", percentage * 100 as f32);
                     bytes_read += to_read;
                 }
 
@@ -166,9 +169,6 @@ impl UploadWorker {
                 let http_protocol = get_web_protocol().await;
 
                 let url = format!("{}//{}/file/upload", http_protocol, base_url);
-                let client = reqwest::Client::new();
-
-                let receiver_key = get_pubkey_from_rec(&file.receiver).await?;
 
                 let body = ChunkMsg {
                     signature,
@@ -179,9 +179,9 @@ impl UploadWorker {
                 }.serialize(&receiver_key)?;
                 trace!("Uploading chunk {} to {} with size {}...", i, url, body.len());
 
-                let res = upload_file(&client, url, body).await?;
+                let mut res = upload_file(url, body).await?;
                 let status = res.status();
-                let e = res.text().await;
+                let e = res.body_string().await;
                 if status != 200 {
                     eprintln!("Error uploading file: {}", e.unwrap_or("unknown err".to_string()));
                 }
@@ -193,6 +193,11 @@ impl UploadWorker {
             let res = to_run().await;
             drop(tx);
 
+            let mut state = curr_chunk_arc.write().await;
+            state.take();
+
+            drop(state);
+
             res?;
             Ok(())
         });
@@ -200,20 +205,20 @@ impl UploadWorker {
         return Ok(handle);
     }
 
-    pub fn start(&mut self, thread_index: u64) -> anyhow::Result<()> {
+    pub async fn start(&mut self, chunk_index: u64) -> anyhow::Result<()> {
         if self.thread.is_some() {
             trace!(
                 "Could not start thread on index {}. Already running.",
-                thread_index
+                chunk_index
             );
             return Err(anyhow!(format!(
                 "Could not start new thread. Already running. Index: {}",
-                thread_index
+                chunk_index
             )));
         }
 
         self.running = true;
-        let thread = self.spawn_thread(thread_index)?;
+        let thread = self.spawn_thread(chunk_index).await?;
         self.thread = Some(thread);
 
         Ok(())
@@ -226,8 +231,8 @@ impl UploadWorker {
         }
 
         let res = self.thread.take().unwrap();
-        tokio::task::yield_now().await;
 
+        trace!("Waiting for end upload...");
         let e = res.await;
         if e.is_err() {
             trace!("Checking for join err:");
@@ -238,11 +243,13 @@ impl UploadWorker {
         }
         e?;
 
+        trace!("Worker end.");
         self.running = false;
 
         return Ok(());
     }
 
+    #[allow(dead_code)]
     pub fn is_running(&self) -> bool {
         return self.running;
     }

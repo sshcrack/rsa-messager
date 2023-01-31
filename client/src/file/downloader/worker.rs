@@ -30,7 +30,7 @@ use uuid::Uuid;
 use crate::{
     util::{
         arcs::{get_base_url, get_curr_keypair},
-        msg::send_msg,
+        msg::send_msg
     },
     web::{prefix::get_web_protocol, progress::download_file},
 };
@@ -95,7 +95,7 @@ impl DownloadWorker {
             );
             return Err(anyhow!("Size of file does not match with metadata"));
         }
-
+ 
         let (tx, rx) = crossbeam_channel::unbounded();
         let arc = Arc::new(RwLock::new(rx));
         let arc_tx = Arc::new(RwLock::new(tx));
@@ -113,10 +113,10 @@ impl DownloadWorker {
         });
     }
 
-    fn spawn_thread(&self, thread_index: u64) -> anyhow::Result<JoinHandle<anyhow::Result<()>>> {
+    fn spawn_thread(&self, chunk_index: u64) -> anyhow::Result<JoinHandle<anyhow::Result<()>>> {
         trace!(
             "Spawning new worker with i: {} uuid: {}",
-            thread_index,
+            chunk_index,
             self.uuid
         );
 
@@ -124,7 +124,7 @@ impl DownloadWorker {
         let tx = self.tx.clone();
         let uuid = self.uuid.clone();
 
-        let i = thread_index;
+        let i = chunk_index;
 
         let out_path = file.path.clone().unwrap();
         let size = file.size;
@@ -165,8 +165,7 @@ impl DownloadWorker {
                 );
 
                 trace!("Downloading with url {}", url);
-                let client = reqwest::Client::new();
-                let response = download_file(&client, url, &tx).await?;
+                let response = download_file(url, &tx).await?;
 
                 // Signature is validated in deserialize, so its fine
                 let deserialized = ChunkMsg::deserialize(&response, &sender_key, &keypair);
@@ -213,8 +212,9 @@ impl DownloadWorker {
             drop(tx);
 
             if res.is_err() {
-                eprintln!("Downloader Worker error:");
-                res?;
+                let err = res.unwrap_err();
+                eprintln!("Downloader Worker error: {:?}", err);
+                return Err(err)
             }
             Ok(())
         });
@@ -222,20 +222,21 @@ impl DownloadWorker {
         return Ok(handle);
     }
 
-    pub fn start(&mut self, thread_index: u64) -> anyhow::Result<()> {
+    pub fn start(&mut self, chunk_index: u64) -> anyhow::Result<()> {
         if self.thread.is_some() {
             trace!(
                 "Could not start thread on index {}. Already running.",
-                thread_index
+                chunk_index
             );
             return Err(anyhow!(format!(
                 "Could not start new thread. Already running. Index: {}",
-                thread_index
+                chunk_index
             )));
         }
 
+        println!("Started and thread spawned.");
         self.running = true;
-        let thread = self.spawn_thread(thread_index)?;
+        let thread = self.spawn_thread(chunk_index)?;
         self.thread = Some(thread);
 
         Ok(())
@@ -248,8 +249,8 @@ impl DownloadWorker {
         }
 
         let res = self.thread.take().unwrap();
-        tokio::task::yield_now().await;
 
+        trace!("Waiting for download end");
         let e = res.await;
         if e.is_err() {
             trace!("Checking for join err:");
@@ -265,6 +266,7 @@ impl DownloadWorker {
         return Ok(());
     }
 
+    #[allow(dead_code)]
     pub fn is_running(&self) -> bool {
         return self.running;
     }

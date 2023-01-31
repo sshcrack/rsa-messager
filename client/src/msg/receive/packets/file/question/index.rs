@@ -40,6 +40,7 @@ pub async fn on_file_question(data: &mut Vec<u8>) -> anyhow::Result<()> {
     println!("{}", confirm_msg);
 
     let accepted = check_accepted(msg.clone()).await?;
+
     let to_send = (FileQuestionReplyMsg {
         accepted,
         uuid: msg.uuid.clone(),

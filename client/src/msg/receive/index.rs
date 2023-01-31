@@ -3,6 +3,7 @@ use std::collections::VecDeque;
 use anyhow::anyhow;
 use colored::Colorize;
 use futures_util::StreamExt;
+use log::trace;
 use packets::util::modes::Modes;
 use packets::util::vec::decque_to_vec;
 use tokio_tungstenite::tungstenite::Message;
@@ -17,27 +18,27 @@ use super::packets::file::question::reply::on_file_question_reply;
 use super::packets::file::start_processing::on_start_processing;
 use super::packets::{from::on_from, uid::on_uid};
 
-pub async fn receive_msgs(
-    mut rx: RXChannel
-) -> anyhow::Result<()> {
+pub async fn receive_msgs(mut rx: RXChannel) -> anyhow::Result<()> {
     while let Some(msg) = rx.next().await {
+        trace!("On receive msg");
         let msg = msg?;
-        println!("Msg received");
         tokio::spawn(async move {
             let res = handle(msg).await;
             if res.is_err() {
                 eprintln!("Error occurred while processing message packet: ");
-                eprintln!("{}", format!("{:?}", res.unwrap_err()).on_bright_red().black());
+                eprintln!(
+                    "{}",
+                    format!("{:?}", res.unwrap_err()).on_bright_red().black()
+                );
             }
+            trace!("Handle res done. Waiting for new.");
         });
     }
 
     Ok(())
 }
 
-pub async fn handle(
-    msg: Message
-) -> anyhow::Result<()> {
+pub async fn handle(msg: Message) -> anyhow::Result<()> {
     let data = msg.into_data();
     let mut decque: VecDeque<u8> = VecDeque::new();
     for i in data {
@@ -46,12 +47,10 @@ pub async fn handle(
 
     let mode = decque.pop_front();
     if mode.is_none() {
-        println!("Received invalid message");
         return Ok(());
     }
 
     let mode = mode.unwrap();
-    println!("Received msg mode {}", mode);
     let mut data = decque_to_vec(decque);
 
     if Modes::From.is_indicator(&mode) {
@@ -59,20 +58,18 @@ pub async fn handle(
         return Ok(());
     }
 
+    if Modes::UidReply.is_indicator(&mode) {
+        on_uid(&mut data).await?;
+        return Ok(());
+    }
+
     if Modes::SendFileQuestion.is_indicator(&mode) {
-        println!("On question");
         on_file_question(&mut data).await?;
-        println!("on question end");
         return Ok(());
     }
 
     if Modes::SendFileQuestionReply.is_indicator(&mode) {
         on_file_question_reply(&mut data).await?;
-        return Ok(());
-    }
-
-    if Modes::UidReply.is_indicator(&mode) {
-        on_uid(&mut data).await?;
         return Ok(());
     }
 
@@ -82,16 +79,12 @@ pub async fn handle(
     }
 
     if Modes::SendFileStartProcessing.is_indicator(&mode) {
-        println!("On processing start");
         on_start_processing(&mut data).await?;
-        println!("On processing end");
         return Ok(());
     }
 
     if Modes::SendFileChunkReady.is_indicator(&mode) {
-        println!("On start ready");
         on_chunk_ready(&mut data).await?;
-        println!("on end ready");
         return Ok(());
     }
 
@@ -102,4 +95,3 @@ pub async fn handle(
 
     return Err(anyhow!("Invalid packet received."));
 }
-

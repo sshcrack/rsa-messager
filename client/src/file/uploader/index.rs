@@ -23,12 +23,13 @@ pub struct Uploader {
     uuid: Uuid,
 
     chunks_completed: Arc<RwLock<u64>>,
+    chunks_processing: Arc<RwLock<Vec<u64>>>,
     threads: Option<u64>,
 
     workers: Arc<RwLock<Vec<UploadWorker>>>,
     progress: Arc<RwLock<HashMap<u64, f32>>>,
 
-    key: Rsa<Public>,
+    receiver_key: Rsa<Public>,
 
     update_tx: Arc<RwLock<Sender<bool>>>,
     update_rx: Arc<RwLock<Receiver<bool>>>,
@@ -37,7 +38,7 @@ pub struct Uploader {
 }
 
 impl Uploader {
-    pub fn new(uuid: &Uuid, key: Rsa<Public>, file: &FileInfo) -> Self {
+    pub fn new(uuid: &Uuid, receiver_key: Rsa<Public>, file: &FileInfo) -> Self {
         let (tx, rx) = crossbeam_channel::unbounded();
 
         return Self {
@@ -47,11 +48,12 @@ impl Uploader {
             chunks_completed: Arc::new(RwLock::new(0)),
             workers: Arc::new(RwLock::new(Vec::new())),
             progress: Arc::new(RwLock::new(HashMap::new())),
-            key,
+            receiver_key,
             update_rx: Arc::new(RwLock::new(rx)),
             update_tx: Arc::new(RwLock::new(tx)),
             update_thread: Arc::new(Mutex::new(None)),
             progress_bar: Arc::new(RwLock::new(None)),
+            chunks_processing: Arc::new(RwLock::new(Vec::new()))
         };
     }
 
@@ -76,20 +78,25 @@ impl Uploader {
         self.threads = Some(to_spawn);
         trace!("Spawning {} workers", to_spawn);
         let mut state = self.workers.write().await;
+        let mut state_processing = self.chunks_processing.write().await;
+
         for i in 0..to_spawn {
             trace!("Spawning upload worker with Thread_Indx {}", i);
-            let mut worker = UploadWorker::new(i, self.uuid, self.key.clone(), self.info.clone())?;
+            let mut worker = UploadWorker::new(i, self.uuid, self.receiver_key.clone(), self.info.clone())?;
 
-            let e = worker.start(i);
+            let e = worker.start(i).await;
             if e.is_err() {
                 drop(state);
+                drop(state_processing);
                 return Err(e.unwrap_err());
             }
 
             state.push(worker);
+            state_processing.push(i);
         }
         trace!("Dropping state workers...");
         drop(state);
+        drop(state_processing);
 
         let state = self.workers.read().await;
         for el in state.iter() {
@@ -201,14 +208,27 @@ impl Uploader {
     }
 
     pub async fn on_next(&self) -> anyhow::Result<()> {
-        let state = self.chunks_completed.read().await;
-        let curr = state.clone();
+        let mut chunks_left = None;
+        trace!("Processing read");
+        let state = self.chunks_processing.read().await;
+        for i in 0..self.get_max_chunks() {
+            if !state.contains(&i) {
+                chunks_left = Some(i);
+                break;
+            }
+        }
 
         drop(state);
-        return self.start_upload(curr).await;
+        if chunks_left.is_none() {
+            return Err(anyhow!("No chunks left."));
+        }
+
+        return self.start_upload(chunks_left.unwrap()).await;
     }
 
     pub async fn start_upload(&self, chunk: u64) -> anyhow::Result<()> {
+        trace!("Starting to upload chunk {}", chunk);
+
         let mut state = self.workers.write().await;
         let futures = state.iter_mut().map(|e| {
             Box::pin(async {
@@ -240,7 +260,12 @@ impl Uploader {
         }
 
         let worker = worker.unwrap();
-        let res = worker.start(chunk);
+        let mut s = self.chunks_processing.write().await;
+        s.push(chunk);
+
+        drop(s);
+
+        let res = worker.start(chunk).await;
         drop(state);
 
         res?;
@@ -253,5 +278,21 @@ impl Uploader {
 
     pub fn get_file_info(&self) -> FileInfo {
         return self.info.clone();
+    }
+
+    pub async fn get_chunks_completed(&self) -> u64 {
+        let state = self.chunks_completed.read().await;
+        let completed = state.clone();
+
+        drop(state);
+        return completed;
+    }
+
+    pub async fn get_chunks_processing(&self) -> Vec<u64> {
+        let state = self.chunks_processing.read().await;
+        let processing = state.clone();
+
+        drop(state);
+        return processing;
     }
 }
