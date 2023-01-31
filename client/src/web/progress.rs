@@ -6,10 +6,11 @@ use surf::Response;
 use std::{cmp::min, sync::Arc};
 use tokio::sync::RwLock;
 
-pub async fn download_file(url: String, sender: &Sender<f32>) -> anyhow::Result<Vec<u8>> {
+use crate::file::tools::WorkerProgress;
+
+pub async fn download_file(url: String, sender: &Sender<WorkerProgress>, chunk_index: u64) -> anyhow::Result<Vec<u8>> {
     let arc = Arc::new(RwLock::new(sender));
 
-    // Reqwest setup
     let res = surf::get(url.clone())
         .await
         .or(Err(anyhow!(format!("Failed to GET from '{}'", &url))))?;
@@ -31,7 +32,6 @@ pub async fn download_file(url: String, sender: &Sender<f32>) -> anyhow::Result<
     }
 
     let total_size = total_size.unwrap();
-    println!("Parsing size '{}' to u64", total_size);
     let total_size = total_size.to_string().parse::<u64>()?;
 
     let mut buffer = Vec::new();
@@ -57,8 +57,13 @@ pub async fn download_file(url: String, sender: &Sender<f32>) -> anyhow::Result<
         buffer.append(&mut chunk);
 
         let new = min(downloaded + (chunk.len() as u64), total_size);
+        let prog = (new as f32) / (total_size as f32);
         downloaded = new;
-        state.send((new as f32) / (total_size as f32))?;
+
+        state.send(WorkerProgress {
+            progress: prog,
+            chunk: chunk_index
+        })?;
     }
     //TODO maybe useless drop?
     drop(state);

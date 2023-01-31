@@ -44,11 +44,6 @@ pub async fn user_message(my_id: Uuid, msg: Message, tx: &UnboundedSender<Messag
     if Modes::SendFileQuestionReply.is_indicator(&mode) {
         return on_file_question_reply(&msg).await;
     }
-/*
-    if Modes::SendFileChunkReady.is_indicator(&mode) {
-        return on_chunk_ready(&msg, &my_id).await;
-    }
- */
     if Modes::SendFileChunkDownloaded.is_indicator(&mode) {
         return on_chunk_downloaded(&msg, &my_id).await;
     }

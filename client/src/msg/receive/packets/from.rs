@@ -10,7 +10,6 @@ pub async fn on_from(data: &mut Vec<u8>) -> anyhow::Result<()> {
     let msg = String::from_utf8(decrypted);
 
     if msg.is_err() {
-        println!("Msg byte");
         return Ok(());
     }
 

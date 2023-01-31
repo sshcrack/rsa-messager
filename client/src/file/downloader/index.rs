@@ -14,19 +14,21 @@ use tokio::{
 };
 use uuid::Uuid;
 
-use crate::util::{consts::CONCURRENT_THREADS, tools::get_avg};
+use crate::{util::{consts::CONCURRENT_THREADS, tools::get_avg}, file::tools::WorkerProgress};
 
 use super::worker::DownloadWorker;
 
 type WorkersType = Arc<RwLock<Vec<DownloadWorker>>>;
-type ProgressType = Arc<RwLock<HashMap<u64, f32>>>;
 
-type UpdateTx = Arc<RwLock<Sender<bool>>>;
-type UpdateRx = Arc<RwLock<Receiver<bool>>>;
+type WorkerTx = Sender<WorkerProgress>;
+type WorkerRx = Receiver<WorkerProgress>;
+
 type UpdateThread = Arc<Mutex<Option<JoinHandle<()>>>>;
 type FileLockType = Arc<Mutex<bool>>;
-type ProgressBarType = Arc<RwLock<Option<ProgressBar>>>;
 type ChunksCompletedType = Arc<RwLock<u64>>;
+
+type ProgressMap = HashMap<u64, f32>;
+type ProgressType = Arc<RwLock<ProgressMap>>;
 
 #[derive(Debug)]
 pub struct Downloader {
@@ -41,34 +43,17 @@ pub struct Downloader {
 
     sender_pubkey: Rsa<Public>,
 
-    update_tx: UpdateTx,
-    update_rx: UpdateRx,
     update_thread: UpdateThread,
 
-    // Bool is just a placeholder
     file_lock: FileLockType,
-    progress_bar: ProgressBarType,
-}
 
-#[derive(Clone)]
-struct ListenProgInfo {
-    progress: ProgressType,
-    update_tx: UpdateTx,
-    chunks_completed: ChunksCompletedType,
-    info: FileInfo
-}
-
-#[derive(Clone)]
-struct PrintUpdateInfo {
-    update_rx: UpdateRx,
-    progress: ProgressType,
-    info: FileInfo,
-    progress_bar: ProgressBarType
+    worker_tx: WorkerTx,
+    worker_rx: WorkerRx
 }
 
 impl Downloader {
     pub fn new(uuid: &Uuid, sender_pubkey: Rsa<Public>, info: &FileInfo) -> Self {
-        let (tx, rx) = crossbeam_channel::unbounded();
+        let (worker_tx, worker_rx) = crossbeam_channel::unbounded();
 
         return Self {
             uuid: uuid.clone(),
@@ -78,39 +63,32 @@ impl Downloader {
             workers: Arc::new(RwLock::new(Vec::new())),
             progress: Arc::new(RwLock::new(HashMap::new())),
             sender_pubkey,
-            update_rx: Arc::new(RwLock::new(rx)),
-            update_tx: Arc::new(RwLock::new(tx)),
             update_thread: Arc::new(Mutex::new(None)),
             file_lock: Arc::new(Mutex::new(false)),
-            progress_bar: Arc::new(RwLock::new(None)),
+            worker_tx: worker_tx,
+            worker_rx: worker_rx,
         };
     }
 
     pub async fn initialize(&mut self, max_chunks: u64) -> anyhow::Result<()> {
+        let handle = self.listen_for_progress_updates()?;
+
+        let mut state = self.update_thread.lock().await;
+        *state = Some(handle);
+
+        drop(state);
+
+
         let info = self.info.clone();
         let workers = self.workers.clone();
         let uuid = self.uuid.clone();
         let sender_pubkey = self.sender_pubkey.clone();
         let file_lock = self.file_lock.clone();
-        let update_thread = self.update_thread.clone();
-        let listen_info = ListenProgInfo {
-            progress: self.progress.clone(),
-            update_tx: self.update_tx.clone(),
-            chunks_completed: self.chunks_completed.clone(),
-            info: info.clone()
-        };
-
-        let update_info = PrintUpdateInfo {
-            info: info.clone(),
-            progress: self.progress.clone(),
-            progress_bar: self.progress_bar.clone(),
-            update_rx: self.update_rx.clone()
-        };
+        let worker_tx = self.worker_tx.clone();
 
         let to_spawn = std::cmp::min(CONCURRENT_THREADS, max_chunks);
         self.threads = Some(to_spawn);
 
-        let e = tokio::spawn(async move {
             if info.path.is_none() {
                 return Err(anyhow!(
                     "Can not initialize downloader when download path is none."
@@ -135,108 +113,14 @@ impl Downloader {
                     sender_pubkey.clone(),
                     info.clone(),
                     file_lock.clone(),
+                    worker_tx.clone()
                 )?;
                 state.push(worker);
             }
 
             drop(state);
-
-            trace!("Listening for progress updates...");
-            let state = workers.read().await;
-            for el in state.iter() {
-                let rec = el.progress_channel.clone();
-                let index = el.get_working_id();
-
-                Downloader::listen_for_progress_updates(listen_info.clone(), rec, index)?;
-            }
-
-            drop(state);
-
-            trace!("Waiting for printing updates...");
-            let handle = Downloader::print_updates(Some(to_spawn), update_info.clone()).await?;
-
-            let mut state = update_thread.lock().await;
-            *state = Some(handle);
-
-            drop(state);
             Ok(())
-        });
 
-        return e.await?;
-    }
-
-    async fn print_updates(threads: Option<u64>, info: PrintUpdateInfo) -> anyhow::Result<JoinHandle<()>> {
-        let PrintUpdateInfo { info, progress, progress_bar, update_rx} = info;
-
-        let temp = update_rx.clone();
-        let temp2 = progress.clone();
-        let spawned = threads;
-        if spawned.is_none() {
-            eprintln!("Cannot print updates if no threads are spawned.");
-            return Err(anyhow!("Cannot print updates with no threads spawned"));
-        }
-
-        let spawned = spawned.unwrap();
-        let spawned = usize::try_from(spawned)?;
-        let max_size = info.size;
-
-        let pb = ProgressBar::new(max_size);
-        pb.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")
-        .unwrap()
-        .with_key("eta", |state: &ProgressState, w: &mut dyn Write| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap())
-        .progress_chars("#>-"));
-
-        progress_bar.write().await.replace(pb);
-
-        let name = info.filename.clone();
-        let pb_arc = progress_bar.clone();
-
-        let e = tokio::spawn(async move {
-            let state = temp.read().await;
-            while let Ok(should_run) = state.recv() {
-                if !should_run {
-                    let state = pb_arc.read().await;
-                    if state.is_some() {
-                        let pb = state.as_ref().unwrap();
-                        pb.finish_with_message(format!("Done downloading file {}", name));
-                    }
-
-                    drop(state);
-                    break;
-                }
-
-                let prog = temp2.read().await;
-
-                let entries = prog.len();
-                let left = spawned - entries;
-
-                let mut percentages: Vec<f32> = prog.iter().map(|e| e.1.clone()).collect();
-                for _ in 0..left {
-                    percentages.push(0 as f32);
-                }
-
-                let avg = get_avg(&percentages);
-                if avg.is_err() {
-                    warn!("Could not get avg: {}", avg.unwrap_err());
-                    continue;
-                }
-
-                let avg = avg.unwrap();
-                let curr = std::cmp::min(max_size, (avg * (max_size as f32)).floor() as u64);
-
-                let state = pb_arc.read().await;
-                if state.is_some() {
-                    let pb = state.as_ref().unwrap();
-                    pb.set_position(curr);
-                }
-
-                drop(state);
-            }
-
-            drop(state);
-        });
-
-        return Ok(e);
     }
 
     pub async fn start_downloading(&self, chunk: u64) -> anyhow::Result<()> {
@@ -261,8 +145,6 @@ impl Downloader {
             return Err(anyhow!("Available Worker is none."));
         }
 
-        self.update_tx.read().await.send(false)?;
-
         let available_worker_id = available_worker_id.unwrap();
         let available_worker_id = usize::try_from(available_worker_id)?;
 
@@ -283,42 +165,60 @@ impl Downloader {
         Ok(())
     }
 
-    fn listen_for_progress_updates(
-        info: ListenProgInfo,
-        rec: Arc<RwLock<Receiver<f32>>>,
-        index: u64,
-    ) -> anyhow::Result<JoinHandle<()>> {
-        let ListenProgInfo { chunks_completed, info, progress, update_tx} = info;
-        let prog_arc = progress.clone();
-        let tx_arc = update_tx.clone();
-        let chunks_arc = chunks_completed.clone();
-        let file_arc = Arc::new(RwLock::new(info.clone()));
+    fn listen_for_progress_updates(&self) -> anyhow::Result<JoinHandle<()>> {
+        let prog_arc = self.progress.clone();
+        let chunks_arc = self.chunks_completed.clone();
+        let file_arc = Arc::new(RwLock::new(self.info.clone()));
+        let max_size = self.info.size;
+        let rec = self.worker_rx.clone();
 
         let e = tokio::spawn(async move {
-            let rec_state = rec.read().await;
+            let pb = ProgressBar::new(max_size);
+            pb.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")
+            .unwrap()
+            .with_key("eta", |state: &ProgressState, w: &mut dyn Write| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap())
+            .progress_chars("#>-"));
 
-            while let Ok(prog) = rec_state.recv() {
+            println!("Listening for updates.");
+            while let Ok(el) = rec.recv() {
+                let WorkerProgress { chunk, progress } = el;
+
                 let mut state = prog_arc.write().await;
-                let tx = tx_arc.read().await;
 
-                state.insert(index, prog);
-
-                let e = tx.send(true);
-                if e.is_err() {
-                    warn!("Could not send update: {}", e.unwrap_err());
-                }
-
-                if prog == 1.0 {
+                state.insert(chunk, progress);
+                if progress >= 1.0 {
+                    trace!("Downloader worker {} finished.", chunk);
                     Downloader::on_worker_done(&chunks_arc, &file_arc).await;
                 }
-                drop(tx);
+
+                Downloader::print_update(&pb, &state, max_size);
                 drop(state);
             }
-
-            trace!("Downloader worker {} finished.", index);
         });
 
         return Ok(e);
+    }
+
+
+    fn print_update(pb: &ProgressBar, progress: &ProgressMap, max_size: u64) {
+        let mut percentages: Vec<f32> = progress.iter().map(|e| e.1.clone()).collect();
+
+        let left = max_size - progress.len() as u64;
+        for _ in 0..left {
+            percentages.push(0 as f32);
+        }
+
+        let avg = get_avg(&percentages);
+        if avg.is_err() {
+            warn!("Could not get avg: {}", avg.unwrap_err());
+            return;
+        }
+
+        let avg = avg.unwrap();
+        println!("Avg is {}", avg);
+        let curr = std::cmp::min(max_size, (avg * (max_size as f32)).floor() as u64);
+
+        pb.set_position(curr);
     }
 
     async fn on_worker_done(chunks_completed: &Arc<RwLock<u64>>, file_arc: &Arc<RwLock<FileInfo>>) {

@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::anyhow;
-use crossbeam_channel::{Receiver, Sender};
+use crossbeam_channel::Sender;
 use log::{debug, trace, warn};
 use openssl::{pkey::Public, rsa::Rsa};
 use packets::{
@@ -32,13 +32,10 @@ use crate::{
         arcs::{get_base_url, get_curr_keypair},
         msg::send_msg
     },
-    web::{prefix::get_web_protocol, progress::download_file},
+    web::{prefix::get_web_protocol, progress::download_file}, file::tools::WorkerProgress,
 };
 
-pub type ProgressChannel = Receiver<f32>;
-pub type ArcProgressChannel = Arc<RwLock<ProgressChannel>>;
-
-pub type ProgressTX = Sender<f32>;
+pub type ProgressTX = Sender<WorkerProgress>;
 pub type ArcProgressTX = Arc<RwLock<ProgressTX>>;
 
 #[derive(Debug)]
@@ -49,7 +46,6 @@ pub struct DownloadWorker {
     thread: Option<JoinHandle<anyhow::Result<()>>>,
     running: bool,
     tx: ArcProgressTX,
-    pub progress_channel: ArcProgressChannel,
     sender_key: Rsa<Public>,
     file_lock: Arc<Mutex<bool>>,
 }
@@ -61,6 +57,7 @@ impl DownloadWorker {
         sender_key: Rsa<Public>,
         file: FileInfo,
         file_lock: Arc<Mutex<bool>>,
+        progress_channel: ProgressTX,
     ) -> anyhow::Result<Self> {
         let FileInfo { size, path, .. } = file.clone();
         if path.is_none() {
@@ -95,10 +92,8 @@ impl DownloadWorker {
             );
             return Err(anyhow!("Size of file does not match with metadata"));
         }
- 
-        let (tx, rx) = crossbeam_channel::unbounded();
-        let arc = Arc::new(RwLock::new(rx));
-        let arc_tx = Arc::new(RwLock::new(tx));
+
+        let arc_tx = Arc::new(RwLock::new(progress_channel));
 
         return Ok(DownloadWorker {
             worker_id,
@@ -106,7 +101,6 @@ impl DownloadWorker {
             uuid,
             thread: None,
             tx: arc_tx,
-            progress_channel: arc,
             running: false,
             sender_key,
             file_lock,
@@ -165,7 +159,7 @@ impl DownloadWorker {
                 );
 
                 trace!("Downloading with url {}", url);
-                let response = download_file(url, &tx).await?;
+                let response = download_file(url, &tx, i).await?;
 
                 // Signature is validated in deserialize, so its fine
                 let deserialized = ChunkMsg::deserialize(&response, &sender_key, &keypair);
@@ -181,7 +175,6 @@ impl DownloadWorker {
 
                 let offset = CHUNK_SIZE_I64 * i as i64;
 
-                trace!("Chunk downloaded. Saving...");
                 let path = Path::new(&out_path);
                 let mut f = OpenOptions::new()
                     .write(true)
@@ -194,7 +187,10 @@ impl DownloadWorker {
 
                 drop(file_lock);
 
-                tx.send(1 as f32)?;
+                tx.send(WorkerProgress {
+                    progress: 1 as f32,
+                    chunk: i
+                })?;
 
                 send_msg(Message::Binary(
                     ChunkDownloadedMsg {
@@ -234,7 +230,6 @@ impl DownloadWorker {
             )));
         }
 
-        println!("Started and thread spawned.");
         self.running = true;
         let thread = self.spawn_thread(chunk_index)?;
         self.thread = Some(thread);
@@ -250,7 +245,6 @@ impl DownloadWorker {
 
         let res = self.thread.take().unwrap();
 
-        trace!("Waiting for download end");
         let e = res.await;
         if e.is_err() {
             trace!("Checking for join err:");

@@ -67,11 +67,9 @@ pub async fn main_loop(stdin: &Stdin, tx: &Sender<String>) -> anyhow::Result<()>
     let line = line.replace("\r", "");
 
     let should_receive = RECEIVE_INPUT.load(Ordering::Relaxed);
-    trace!("Should receive: {}", should_receive);
     if should_receive {
         let temp = tx.clone();
 
-        trace!("Spawning tx thread...");
         let task = tokio::task::spawn(async move { temp.send(line.clone()).await });
 
         task.await??;
@@ -83,14 +81,11 @@ pub async fn main_loop(stdin: &Stdin, tx: &Sender<String>) -> anyhow::Result<()>
         return Ok(());
     }
 
-    println!("Line is '{}'", line);
     if line == "" {
-        println!("Continue");
         return Ok(());
     }
     let rec_got = rec_got.clone().unwrap();
 
-    trace!("Getting pubkey from rec...");
     let key = get_pubkey_from_rec(&rec_got).await?;
     let encrypted = encrypt_rsa(&key, &line.as_bytes().to_vec())?;
 
@@ -102,8 +97,6 @@ pub async fn main_loop(stdin: &Stdin, tx: &Sender<String>) -> anyhow::Result<()>
     }
     .serialize();
 
-    trace!("Sending msg");
     send_msg(Message::Binary(to_send)).await?;
-    trace!("Done.");
     return Ok(());
 }

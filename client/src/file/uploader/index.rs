@@ -13,33 +13,42 @@ use tokio::{
 };
 use uuid::Uuid;
 
-use crate::util::{consts::CONCURRENT_THREADS, tools::get_avg};
+use crate::{
+    file::tools::WorkerProgress,
+    util::{consts::CONCURRENT_THREADS, tools::get_avg},
+};
 
 use super::worker::UploadWorker;
+type ChunksCompletedType = Arc<RwLock<u64>>;
+type ChunksProcessingType = Arc<RwLock<Vec<u64>>>;
+type WorkersType = Arc<RwLock<Vec<UploadWorker>>>;
+type ProgressMap = HashMap<u64, f32>;
+type ProgressType = Arc<RwLock<ProgressMap>>;
+type UpdateThreadType = Arc<Mutex<Option<JoinHandle<()>>>>;
 
 #[derive(Debug)]
 pub struct Uploader {
     info: FileInfo,
     uuid: Uuid,
 
-    chunks_completed: Arc<RwLock<u64>>,
-    chunks_processing: Arc<RwLock<Vec<u64>>>,
+    chunks_completed: ChunksCompletedType,
+    chunks_processing: ChunksProcessingType,
     threads: Option<u64>,
 
-    workers: Arc<RwLock<Vec<UploadWorker>>>,
-    progress: Arc<RwLock<HashMap<u64, f32>>>,
+    workers: WorkersType,
+    progress: ProgressType,
 
     receiver_key: Rsa<Public>,
 
-    update_tx: Arc<RwLock<Sender<bool>>>,
-    update_rx: Arc<RwLock<Receiver<bool>>>,
-    update_thread: Arc<Mutex<Option<JoinHandle<()>>>>,
-    progress_bar: Arc<RwLock<Option<ProgressBar>>>,
+    update_thread: UpdateThreadType,
+
+    worker_tx: Sender<WorkerProgress>,
+    worker_rx: Receiver<WorkerProgress>,
 }
 
 impl Uploader {
     pub fn new(uuid: &Uuid, receiver_key: Rsa<Public>, file: &FileInfo) -> Self {
-        let (tx, rx) = crossbeam_channel::unbounded();
+        let (worker_tx, worker_rx) = crossbeam_channel::unbounded();
 
         return Self {
             uuid: uuid.clone(),
@@ -49,11 +58,10 @@ impl Uploader {
             workers: Arc::new(RwLock::new(Vec::new())),
             progress: Arc::new(RwLock::new(HashMap::new())),
             receiver_key,
-            update_rx: Arc::new(RwLock::new(rx)),
-            update_tx: Arc::new(RwLock::new(tx)),
             update_thread: Arc::new(Mutex::new(None)),
-            progress_bar: Arc::new(RwLock::new(None)),
-            chunks_processing: Arc::new(RwLock::new(Vec::new()))
+            chunks_processing: Arc::new(RwLock::new(Vec::new())),
+            worker_rx,
+            worker_tx,
         };
     }
 
@@ -73,6 +81,12 @@ impl Uploader {
         }
         drop(state);
 
+        let handle = self.listen_for_progress_update()?;
+
+        let mut state = self.update_thread.lock().await;
+        *state = Some(handle);
+
+        drop(state);
         let to_spawn = std::cmp::min(CONCURRENT_THREADS, max_threads);
 
         self.threads = Some(to_spawn);
@@ -82,7 +96,13 @@ impl Uploader {
 
         for i in 0..to_spawn {
             trace!("Spawning upload worker with Thread_Indx {}", i);
-            let mut worker = UploadWorker::new(i, self.uuid, self.receiver_key.clone(), self.info.clone())?;
+            let mut worker = UploadWorker::new(
+                i,
+                self.uuid,
+                self.receiver_key.clone(),
+                self.info.clone(),
+                self.worker_tx.clone(),
+            )?;
 
             let e = worker.start(i).await;
             if e.is_err() {
@@ -97,119 +117,68 @@ impl Uploader {
         trace!("Dropping state workers...");
         drop(state);
         drop(state_processing);
-
-        let state = self.workers.read().await;
-        for el in state.iter() {
-            let rec = el.progress_channel.clone();
-            let index = el.get_working_id();
-
-            let temp = self.progress.clone();
-            let temp1 = self.update_tx.clone();
-            let temp2 = self.chunks_completed.clone();
-
-            tokio::spawn(async move {
-                let rec_state = rec.read().await;
-
-                while let Ok(prog) = rec_state.recv() {
-                    let mut state = temp.write().await;
-                    let tx = temp1.read().await;
-
-                    state.insert(index, prog);
-                    let e = tx.send(true);
-                    if e.is_err() {
-                        warn!("Could not send update: {}", e.unwrap_err());
-                    }
-
-                    if prog == 1.0 {
-                        let mut s = temp2.write().await;
-                        *s = s.add(1 as u64);
-
-                        drop(s);
-                    }
-                    drop(tx);
-                    drop(state);
-                }
-                trace!("Upload worker {} finished.", index);
-            });
-        }
-
-        drop(state);
-
-        let handle = self.print_updates().await?;
-
-        let mut state = self.update_thread.lock().await;
-        *state = Some(handle);
-
-        drop(state);
         Ok(())
     }
 
-    async fn print_updates(&self) -> anyhow::Result<JoinHandle<()>> {
-        let temp = self.update_rx.clone();
-        let temp2 = self.progress.clone();
-        let spawned = self.threads;
-        if spawned.is_none() {
-            eprintln!("Cannot print updates if no threads are spawned.");
-            return Err(anyhow!("Cannot print updates with no threads spawned"));
+    fn print_update(pb: &ProgressBar, progress: &ProgressMap, max_size: u64) {
+        let mut percentages: Vec<f32> = progress.iter().map(|e| e.1.clone()).collect();
+
+        let left = max_size - progress.len() as u64;
+        for _ in 0..left {
+            percentages.push(0 as f32);
         }
 
-        let spawned = spawned.unwrap();
-        let spawned = usize::try_from(spawned)?;
+        let avg = get_avg(&percentages);
+        if avg.is_err() {
+            warn!("Could not get avg: {}", avg.unwrap_err());
+            return;
+        }
+
+        let avg = avg.unwrap();
+        println!("Avg is {}", avg);
+        let curr = std::cmp::min(max_size, (avg * (max_size as f32)).floor() as u64);
+
+        pb.set_position(curr);
+    }
+
+    fn listen_for_progress_update(&self) -> anyhow::Result<JoinHandle<()>> {
+        let temp = self.progress.clone();
+        let temp2 = self.chunks_completed.clone();
+        let worker_rx = self.worker_rx.clone();
 
         let max_size = self.info.size;
-        let pb = ProgressBar::new(max_size);
-        pb.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")
-        .unwrap()
-        .with_key("eta", |state: &ProgressState, w: &mut dyn Write| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap())
-        .progress_chars("#>-"));
-
-        self.progress_bar.write().await.replace(pb);
-
-        let pb_arc = self.progress_bar.clone();
         let e = tokio::spawn(async move {
-            let state = temp.read().await;
-            while let Ok(should_run) = state.recv() {
-                if !should_run {
-                    break;
+            let pb = ProgressBar::new(max_size);
+            pb.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")
+            .unwrap()
+            .with_key("eta", |state: &ProgressState, w: &mut dyn Write| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap())
+            .progress_chars("#>-"));
+
+            println!("Listening for updates.");
+            while let Ok(el) = worker_rx.recv() {
+                let WorkerProgress { chunk, progress } = el;
+
+                let mut state = temp.write().await;
+                state.insert(chunk, progress);
+
+                if progress == 1.0 {
+                    let mut s = temp2.write().await;
+                    *s = s.add(1 as u64);
+
+                    drop(s);
+                    trace!("Upload worker {} finished.", chunk);
                 }
 
-                let prog = temp2.read().await;
-
-                let entries = prog.len();
-                let left = spawned - entries;
-
-                let mut percentages: Vec<f32> = prog.iter().map(|e| e.1.clone()).collect();
-                for _ in 0..left {
-                    percentages.push(0 as f32);
-                }
-
-                let avg = get_avg(&percentages);
-                if avg.is_err() {
-                    warn!("Could not get avg: {}", avg.unwrap_err());
-                    continue;
-                }
-
-                let avg = avg.unwrap();
-                let curr = std::cmp::min(max_size, (avg * (max_size as f32)).floor() as u64);
-
-                let state = pb_arc.read().await;
-                if state.is_some() {
-                    let pb = state.as_ref().unwrap();
-                    pb.set_position(curr);
-                }
-
-                drop(prog);
+                Uploader::print_update(&pb, &state, max_size);
+                drop(state);
             }
-
-            drop(state);
         });
 
-        return Ok(e);
+        return Ok(e)
     }
 
     pub async fn on_next(&self) -> anyhow::Result<()> {
         let mut chunks_left = None;
-        trace!("Processing read");
         let state = self.chunks_processing.read().await;
         for i in 0..self.get_max_chunks() {
             if !state.contains(&i) {

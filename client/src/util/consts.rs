@@ -6,7 +6,7 @@ use lazy_static::lazy_static;
 
 use super::types::*;
 
-pub const CONCURRENT_THREADS: u64 = 13;
+pub const CONCURRENT_THREADS: u64 = 64;
 
 lazy_static! {
     pub static ref BASE_URL: BaseUrl = Arc::new(RwLock::new("".to_string()));

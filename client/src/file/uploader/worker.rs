@@ -2,7 +2,7 @@ use std::{io::SeekFrom, path::Path, sync::Arc};
 
 use anyhow::anyhow;
 use bytes::{BytesMut, Buf};
-use crossbeam_channel::{Receiver, Sender};
+use crossbeam_channel::Sender;
 use log::{debug, trace, warn};
 use openssl::{pkey::Public, rsa::Rsa};
 use packets::{
@@ -17,12 +17,9 @@ use tokio::{
 };
 use uuid::Uuid;
 
-use crate::{util::arcs::{get_curr_keypair, get_base_url}, web::{prefix::get_web_protocol, progress::upload_file}};
+use crate::{util::arcs::{get_curr_keypair, get_base_url}, web::{prefix::get_web_protocol, progress::upload_file}, file::tools::WorkerProgress};
 
-pub type ProgressChannel = Receiver<f32>;
-pub type ArcProgressChannel = Arc<RwLock<ProgressChannel>>;
-
-pub type ProgressTX = Sender<f32>;
+pub type ProgressTX = Sender<WorkerProgress>;
 pub type ArcProgressTX = Arc<RwLock<ProgressTX>>;
 
 #[derive(Debug)]
@@ -42,8 +39,8 @@ impl UploadWorker {
         worker_id: u64,
         uuid: Uuid,
         receiver_key: Rsa<Public>,
-        progress_channel: ArcProgressTX,
         file: FileInfo,
+        progress_channel: ProgressTX,
     ) -> anyhow::Result<UploadWorker> {
         let FileInfo { filename, size,path, .. } = file.clone();
         if path.is_none() {
@@ -73,7 +70,7 @@ impl UploadWorker {
             file,
             uuid,
             thread: None,
-            tx: progress_channel,
+            tx: Arc::new(RwLock::new(progress_channel)),
             running: false,
             receiver_key,
             curr_chunk: Arc::new(RwLock::new(None))
@@ -120,7 +117,6 @@ impl UploadWorker {
                     max_chunks
                 );
 
-                trace!("Reading file {}...", path.display());
                 let f = File::open(&path).await?;
                 let mut buf = BufReader::new(f);
                 let seek_to = i64::try_from(CHUNK_SIZE * i)?;
@@ -152,8 +148,12 @@ impl UploadWorker {
                     buf.read_buf(&mut small_chunk).await?;
                     chunk.append(&mut small_chunk.chunk().to_vec());
 
-                    let percentage = (bytes_read as f32) / (chunk_size as f32) * 0.5;
-                    tx.send(percentage)?;
+                    let progress = (bytes_read as f32) / (chunk_size as f32) * 0.5;
+                    println!("Arc update {}", progress); //EEE
+                    tx.send(WorkerProgress {
+                        progress,
+                        chunk: i
+                    })?;
 
                     bytes_read += to_read;
                 }
@@ -185,7 +185,11 @@ impl UploadWorker {
                 if status != 200 {
                     eprintln!("Error uploading file: {}", e.unwrap_or("unknown err".to_string()));
                 }
-                tx.send(1 as f32)?;
+
+                tx.send(WorkerProgress {
+                    progress: 1 as f32,
+                    chunk: i
+                })?;
                 debug!("Worker {} of file {} done.", i, uuid);
                 Ok(())
             };
@@ -232,7 +236,6 @@ impl UploadWorker {
 
         let res = self.thread.take().unwrap();
 
-        trace!("Waiting for end upload...");
         let e = res.await;
         if e.is_err() {
             trace!("Checking for join err:");
