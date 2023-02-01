@@ -1,14 +1,13 @@
 use anyhow::anyhow;
-use crossbeam_channel::Sender;
 use futures_util::io::BufReader;
 use futures_util::AsyncBufReadExt;
 use surf::Response;
 use std::{cmp::min, sync::Arc};
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, mpsc::UnboundedSender};
 
 use crate::file::tools::WorkerProgress;
 
-pub async fn download_file(url: String, sender: &Sender<WorkerProgress>, chunk_index: u64) -> anyhow::Result<Vec<u8>> {
+pub async fn download_file(url: String, sender: &UnboundedSender<WorkerProgress>, chunk_index: u64) -> anyhow::Result<Vec<u8>> {
     let arc = Arc::new(RwLock::new(sender));
 
     let res = surf::get(url.clone())
@@ -40,7 +39,6 @@ pub async fn download_file(url: String, sender: &Sender<WorkerProgress>, chunk_i
 
     let mut downloaded: u64 = 0;
 
-    let state = arc.read().await;
     loop {
         let mut buf_state = arc_stream.write().await;
         let mut chunk = buf_state.fill_buf().await?.to_vec();
@@ -54,19 +52,31 @@ pub async fn download_file(url: String, sender: &Sender<WorkerProgress>, chunk_i
         buf_state.consume_unpin(chunk.len());
         drop(buf_state);
 
+        let length = chunk.len();
         buffer.append(&mut chunk);
 
-        let new = min(downloaded + (chunk.len() as u64), total_size);
+        let new = min(downloaded + (length as u64), total_size);
         let prog = (new as f32) / (total_size as f32);
         downloaded = new;
 
-        state.send(WorkerProgress {
+        let state = arc.read().await;
+        let e = state.send(WorkerProgress {
             progress: prog,
             chunk: chunk_index
-        })?;
+        });
+        drop(state);
+        e?;
     }
-    //TODO maybe useless drop?
+
+
+    let state = arc.read().await;
+    let e = state.send(WorkerProgress {
+        progress: 1 as f32,
+        chunk: chunk_index
+    });
     drop(state);
+    e?;
+
     return Ok(buffer);
 }
 
@@ -97,7 +107,7 @@ pub async fn upload_file(
         drop(state);
     }; */
 
-    let e = surf::post(url).body(buf).send().await;
+    let e = surf::post(url).body_bytes(buf).send().await;
     if e.is_err() {
         let err = e.unwrap_err();
         let err: anyhow::Error = err.into_inner();

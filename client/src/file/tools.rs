@@ -14,6 +14,7 @@ pub async fn get_pending_file(uuid: Uuid) -> anyhow::Result<FileInfo> {
     return Ok(temp.unwrap().to_owned());
 }
 
+#[derive(Debug, Clone)]
 pub struct WorkerProgress {
     pub chunk: u64,
     pub progress: f32

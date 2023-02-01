@@ -2,16 +2,16 @@ use std::{collections::HashMap, fmt::Write, ops::Add, sync::Arc};
 
 use anyhow::anyhow;
 use colored::Colorize;
-use crossbeam_channel::{Receiver, Sender};
 use futures_util::future::select_all;
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use log::{trace, warn};
 use openssl::{pkey::Public, rsa::Rsa};
 use packets::file::{processing::tools::get_max_chunks, types::FileInfo};
 use tokio::{
-    sync::{Mutex, RwLock},
+    sync::{Mutex, RwLock, mpsc::{self, UnboundedSender}},
     task::JoinHandle,
 };
+use tokio_stream::{wrappers::UnboundedReceiverStream, StreamExt};
 use uuid::Uuid;
 
 use crate::{util::{consts::CONCURRENT_THREADS, tools::get_avg}, file::tools::WorkerProgress};
@@ -20,8 +20,11 @@ use super::worker::DownloadWorker;
 
 type WorkersType = Arc<RwLock<Vec<DownloadWorker>>>;
 
-type WorkerTx = Sender<WorkerProgress>;
-type WorkerRx = Receiver<WorkerProgress>;
+type WorkerTx = UnboundedSender<WorkerProgress>;
+type ArcWorkerTx = Arc<RwLock<WorkerTx>>;
+
+type WorkerRx = UnboundedReceiverStream<WorkerProgress>;
+type ArcWorkerRx = Arc<RwLock<WorkerRx>>;
 
 type UpdateThread = Arc<Mutex<Option<JoinHandle<()>>>>;
 type FileLockType = Arc<Mutex<bool>>;
@@ -47,14 +50,15 @@ pub struct Downloader {
 
     file_lock: FileLockType,
 
-    worker_tx: WorkerTx,
-    worker_rx: WorkerRx
+    worker_tx: ArcWorkerTx,
+    worker_rx: ArcWorkerRx
 }
 
 impl Downloader {
     pub fn new(uuid: &Uuid, sender_pubkey: Rsa<Public>, info: &FileInfo) -> Self {
-        let (worker_tx, worker_rx) = crossbeam_channel::unbounded();
+        let (worker_tx, worker_rx) = mpsc::unbounded_channel();
 
+        let worker_rx = UnboundedReceiverStream::new(worker_rx);
         return Self {
             uuid: uuid.clone(),
             info: info.clone(),
@@ -65,8 +69,8 @@ impl Downloader {
             sender_pubkey,
             update_thread: Arc::new(Mutex::new(None)),
             file_lock: Arc::new(Mutex::new(false)),
-            worker_tx: worker_tx,
-            worker_rx: worker_rx,
+            worker_tx: Arc::new(RwLock::new(worker_tx)),
+            worker_rx: Arc::new(RwLock::new(worker_rx)),
         };
     }
 
@@ -170,7 +174,7 @@ impl Downloader {
         let chunks_arc = self.chunks_completed.clone();
         let file_arc = Arc::new(RwLock::new(self.info.clone()));
         let max_size = self.info.size;
-        let rec = self.worker_rx.clone();
+        let worker_rx_arc = self.worker_rx.clone();
 
         let e = tokio::spawn(async move {
             let pb = ProgressBar::new(max_size);
@@ -179,12 +183,14 @@ impl Downloader {
             .with_key("eta", |state: &ProgressState, w: &mut dyn Write| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap())
             .progress_chars("#>-"));
 
+            let mut worker_rx = worker_rx_arc.write().await;
             println!("Listening for updates.");
-            while let Ok(el) = rec.recv() {
+            while let Some(el) = worker_rx.next().await {
                 let WorkerProgress { chunk, progress } = el;
 
                 let mut state = prog_arc.write().await;
 
+                println!("New Chunk {} at {}", chunk, progress);
                 state.insert(chunk, progress);
                 if progress >= 1.0 {
                     trace!("Downloader worker {} finished.", chunk);
@@ -194,6 +200,8 @@ impl Downloader {
                 Downloader::print_update(&pb, &state, max_size);
                 drop(state);
             }
+            println!("Done listening.");
+            drop(worker_rx);
         });
 
         return Ok(e);

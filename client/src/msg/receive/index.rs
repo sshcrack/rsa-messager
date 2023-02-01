@@ -3,7 +3,6 @@ use std::collections::VecDeque;
 use anyhow::anyhow;
 use colored::Colorize;
 use futures_util::StreamExt;
-use log::trace;
 use packets::util::modes::Modes;
 use packets::util::vec::decque_to_vec;
 use tokio_tungstenite::tungstenite::Message;
@@ -20,7 +19,6 @@ use super::packets::{from::on_from, uid::on_uid};
 
 pub async fn receive_msgs(mut rx: RXChannel) -> anyhow::Result<()> {
     while let Some(msg) = rx.next().await {
-        trace!("On receive msg");
         let msg = msg?;
         tokio::spawn(async move {
             let res = handle(msg).await;
@@ -31,7 +29,6 @@ pub async fn receive_msgs(mut rx: RXChannel) -> anyhow::Result<()> {
                     format!("{:?}", res.unwrap_err()).on_bright_red().black()
                 );
             }
-            trace!("Handle res done. Waiting for new.");
         });
     }
 

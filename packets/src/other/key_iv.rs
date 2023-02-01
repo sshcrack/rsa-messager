@@ -4,7 +4,6 @@ use crate::{
     consts::{AES_DIGEST, AES_IVSIZE_BYTES, AES_KEYSIZE_BYTES, AES_KEYSIZE_BITS, AES_IVSIZE_BITS},
     util::{vec::extract_vec, rsa::{encrypt_rsa, decrypt_rsa}, tools::usize_from_vec},
 };
-use log::trace;
 
 #[derive(Debug, Clone)]
 pub struct KeyIVPair {
@@ -24,7 +23,6 @@ impl KeyIVPair {
         let mut b_iv = encrypt_rsa(keypair, &self.iv.clone())?;
         let mut b_iv_size = b_iv.len().to_le_bytes().to_vec();
 
-        trace!("Serializing KeyIVPair with key size {} and iv size {}", b_key.len(), b_iv.len());
         merged.append(&mut b_key_size);
         merged.append(&mut b_key);
         merged.append(&mut b_iv_size);
@@ -44,7 +42,6 @@ impl KeyIVPair {
         let key = decrypt_rsa(keypair, &key)?;
         let iv = decrypt_rsa(keypair, &iv)?;
 
-        trace!("Deserializing KeyIVPair with key size {} and iv size {}", key_size, iv_size);
         return Ok(Self { key, iv });
     }
 

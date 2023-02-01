@@ -1,16 +1,16 @@
 use std::{collections::HashMap, fmt::Write, ops::Add, sync::Arc};
 
 use anyhow::anyhow;
-use crossbeam_channel::{Receiver, Sender};
 use futures_util::future::select_all;
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use log::{trace, warn};
 use openssl::{pkey::Public, rsa::Rsa};
 use packets::file::{processing::tools::get_max_chunks, types::FileInfo};
 use tokio::{
-    sync::{Mutex, RwLock},
+    sync::{Mutex, RwLock, mpsc::{self, UnboundedSender}},
     task::JoinHandle,
 };
+use tokio_stream::{wrappers::UnboundedReceiverStream, StreamExt};
 use uuid::Uuid;
 
 use crate::{
@@ -42,14 +42,15 @@ pub struct Uploader {
 
     update_thread: UpdateThreadType,
 
-    worker_tx: Sender<WorkerProgress>,
-    worker_rx: Receiver<WorkerProgress>,
+    worker_tx: Arc<RwLock<UnboundedSender<WorkerProgress>>>,
+    worker_rx: Arc<RwLock<UnboundedReceiverStream<WorkerProgress>>>,
 }
 
 impl Uploader {
     pub fn new(uuid: &Uuid, receiver_key: Rsa<Public>, file: &FileInfo) -> Self {
-        let (worker_tx, worker_rx) = crossbeam_channel::unbounded();
+        let (worker_tx, worker_rx) = mpsc::unbounded_channel();
 
+        let worker_rx = UnboundedReceiverStream::new(worker_rx);
         return Self {
             uuid: uuid.clone(),
             info: file.clone(),
@@ -60,8 +61,8 @@ impl Uploader {
             receiver_key,
             update_thread: Arc::new(Mutex::new(None)),
             chunks_processing: Arc::new(RwLock::new(Vec::new())),
-            worker_rx,
-            worker_tx,
+            worker_rx: Arc::new(RwLock::new(worker_rx)),
+            worker_tx: Arc::new(RwLock::new(worker_tx)),
         };
     }
 
@@ -144,7 +145,7 @@ impl Uploader {
     fn listen_for_progress_update(&self) -> anyhow::Result<JoinHandle<()>> {
         let temp = self.progress.clone();
         let temp2 = self.chunks_completed.clone();
-        let worker_rx = self.worker_rx.clone();
+        let worker_rx_arc = self.worker_rx.clone();
 
         let max_size = self.info.size;
         let e = tokio::spawn(async move {
@@ -154,11 +155,13 @@ impl Uploader {
             .with_key("eta", |state: &ProgressState, w: &mut dyn Write| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap())
             .progress_chars("#>-"));
 
+            let mut worker_rx = worker_rx_arc.write().await;
             println!("Listening for updates.");
-            while let Ok(el) = worker_rx.recv() {
+            while let Some(el) = worker_rx.next().await {
                 let WorkerProgress { chunk, progress } = el;
 
                 let mut state = temp.write().await;
+                println!("New Chunk {} at {}", chunk, progress);
                 state.insert(chunk, progress);
 
                 if progress == 1.0 {
@@ -172,8 +175,10 @@ impl Uploader {
                 Uploader::print_update(&pb, &state, max_size);
                 drop(state);
             }
+            drop(worker_rx);
         });
 
+        println!("Done listening.");
         return Ok(e)
     }
 

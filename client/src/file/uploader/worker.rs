@@ -2,7 +2,6 @@ use std::{io::SeekFrom, path::Path, sync::Arc};
 
 use anyhow::anyhow;
 use bytes::{BytesMut, Buf};
-use crossbeam_channel::Sender;
 use log::{debug, trace, warn};
 use openssl::{pkey::Public, rsa::Rsa};
 use packets::{
@@ -12,14 +11,14 @@ use packets::{
 use tokio::{
     fs::File,
     io::{AsyncReadExt, AsyncSeekExt, BufReader},
-    sync::RwLock,
+    sync::{RwLock, mpsc::UnboundedSender},
     task::JoinHandle,
 };
 use uuid::Uuid;
 
 use crate::{util::arcs::{get_curr_keypair, get_base_url}, web::{prefix::get_web_protocol, progress::upload_file}, file::tools::WorkerProgress};
 
-pub type ProgressTX = Sender<WorkerProgress>;
+pub type ProgressTX = UnboundedSender<WorkerProgress>;
 pub type ArcProgressTX = Arc<RwLock<ProgressTX>>;
 
 #[derive(Debug)]
@@ -40,7 +39,7 @@ impl UploadWorker {
         uuid: Uuid,
         receiver_key: Rsa<Public>,
         file: FileInfo,
-        progress_channel: ProgressTX,
+        progress_channel: ArcProgressTX,
     ) -> anyhow::Result<UploadWorker> {
         let FileInfo { filename, size,path, .. } = file.clone();
         if path.is_none() {
@@ -70,7 +69,7 @@ impl UploadWorker {
             file,
             uuid,
             thread: None,
-            tx: Arc::new(RwLock::new(progress_channel)),
+            tx: progress_channel,
             running: false,
             receiver_key,
             curr_chunk: Arc::new(RwLock::new(None))
@@ -102,7 +101,6 @@ impl UploadWorker {
 
         let handle: JoinHandle<anyhow::Result<()>> = tokio::spawn(async move {
 
-            let tx = tx.read().await;
             let to_run = || async {
                 let max_chunks = get_max_chunks(size);
 
@@ -149,11 +147,13 @@ impl UploadWorker {
                     chunk.append(&mut small_chunk.chunk().to_vec());
 
                     let progress = (bytes_read as f32) / (chunk_size as f32) * 0.5;
-                    println!("Arc update {}", progress); //EEE
-                    tx.send(WorkerProgress {
+                    let tx = tx.read().await;
+                    let e = tx.send(WorkerProgress {
                         progress,
                         chunk: i
-                    })?;
+                    });
+                    drop(tx);
+                    e?;
 
                     bytes_read += to_read;
                 }
@@ -164,7 +164,6 @@ impl UploadWorker {
                 let keypair = get_curr_keypair().await?;
                 let signature = get_signature(&encrypted.clone(), &keypair)?;
 
-                trace!("Base...");
                 let base_url = get_base_url().await;
                 let http_protocol = get_web_protocol().await;
 
@@ -186,16 +185,18 @@ impl UploadWorker {
                     eprintln!("Error uploading file: {}", e.unwrap_or("unknown err".to_string()));
                 }
 
-                tx.send(WorkerProgress {
+                let tx = tx.read().await;
+                let e = tx.send(WorkerProgress {
                     progress: 1 as f32,
                     chunk: i
-                })?;
+                });
+                drop(tx);
+                e?;
                 debug!("Worker {} of file {} done.", i, uuid);
                 Ok(())
             };
 
             let res = to_run().await;
-            drop(tx);
 
             let mut state = curr_chunk_arc.write().await;
             state.take();

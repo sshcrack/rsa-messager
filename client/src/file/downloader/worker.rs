@@ -5,7 +5,6 @@ use std::{
 };
 
 use anyhow::anyhow;
-use crossbeam_channel::Sender;
 use log::{debug, trace, warn};
 use openssl::{pkey::Public, rsa::Rsa};
 use packets::{
@@ -21,7 +20,7 @@ use packets::{
 use tokio::{
     fs::OpenOptions,
     io::{AsyncSeekExt, AsyncWriteExt},
-    sync::{Mutex, RwLock},
+    sync::{Mutex, RwLock, mpsc::UnboundedSender},
     task::JoinHandle,
 };
 use tokio_tungstenite::tungstenite::Message;
@@ -35,7 +34,7 @@ use crate::{
     web::{prefix::get_web_protocol, progress::download_file}, file::tools::WorkerProgress,
 };
 
-pub type ProgressTX = Sender<WorkerProgress>;
+pub type ProgressTX = UnboundedSender<WorkerProgress>;
 pub type ArcProgressTX = Arc<RwLock<ProgressTX>>;
 
 #[derive(Debug)]
@@ -57,7 +56,7 @@ impl DownloadWorker {
         sender_key: Rsa<Public>,
         file: FileInfo,
         file_lock: Arc<Mutex<bool>>,
-        progress_channel: ProgressTX,
+        progress_channel: ArcProgressTX,
     ) -> anyhow::Result<Self> {
         let FileInfo { size, path, .. } = file.clone();
         if path.is_none() {
@@ -93,14 +92,12 @@ impl DownloadWorker {
             return Err(anyhow!("Size of file does not match with metadata"));
         }
 
-        let arc_tx = Arc::new(RwLock::new(progress_channel));
-
         return Ok(DownloadWorker {
             worker_id,
             file,
             uuid,
             thread: None,
-            tx: arc_tx,
+            tx: progress_channel,
             running: false,
             sender_key,
             file_lock,
@@ -158,7 +155,6 @@ impl DownloadWorker {
                     hex::encode(uuid_signature)
                 );
 
-                trace!("Downloading with url {}", url);
                 let response = download_file(url, &tx, i).await?;
 
                 // Signature is validated in deserialize, so its fine
@@ -186,11 +182,6 @@ impl DownloadWorker {
                 f.write_all(&decrypted).await?;
 
                 drop(file_lock);
-
-                tx.send(WorkerProgress {
-                    progress: 1 as f32,
-                    chunk: i
-                })?;
 
                 send_msg(Message::Binary(
                     ChunkDownloadedMsg {
@@ -239,7 +230,6 @@ impl DownloadWorker {
 
     pub async fn wait_for_end(&mut self) -> anyhow::Result<()> {
         if self.thread.is_none() {
-            warn!("Thread is none. Could not wait for end so returning instantly.");
             return Ok(());
         }
 
