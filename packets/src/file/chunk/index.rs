@@ -1,5 +1,4 @@
 use anyhow::anyhow;
-use log::trace;
 
 use openssl::pkey::{Public, Private};
 use openssl::rsa::Rsa;
@@ -32,7 +31,6 @@ impl ChunkMsg {
 
         let mut b_chunk_index = self.chunk_index.clone().to_le_bytes().to_vec();
 
-        trace!("ChunkMsg data length: {}", b_encrypted.len());
         merged.append(&mut signature_size.clone());
         merged.append(&mut self.signature.clone());
         merged.append(&mut b_uuid);
@@ -54,7 +52,6 @@ impl ChunkMsg {
 
         let key = KeyIVPair::deserialize_mut(&mut data, receiver_key)?;
 
-        trace!("ChunkMsg data length: {}", data.len());
         let valid = validate_signature(&data, &signature, sender_pubkey)?;
         if !valid {
             return Err(anyhow!("Invalid signature in ChunkByteMsg"));

@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::anyhow;
 use colored::Colorize;
+use indicatif::HumanBytes;
 use log::trace;
 use openssl::rsa::Rsa;
 use packets::{
@@ -12,7 +13,6 @@ use packets::{
     },
     types::ByteMessage,
 };
-use pretty_bytes::converter::convert;
 use tokio::{ fs::{File, remove_file}, io::AsyncWriteExt };
 use tokio_tungstenite::tungstenite::Message;
 
@@ -20,7 +20,7 @@ use crate::{
     util::{
         consts::{ PENDING_FILES, FILE_DOWNLOADS },
         msg::{ send_msg, get_input },
-        tools::{ uuid_to_name, wait_confirm },
+        tools::{ uuid_to_name, wait_confirm }, arcs::get_concurrent_threads,
     },
     file::downloader::index::Downloader,
     web::user_info::get_user_info,
@@ -30,7 +30,7 @@ pub async fn on_file_question(data: &mut Vec<u8>) -> anyhow::Result<()> {
     let msg = FileQuestionMsg::deserialize(data)?;
     let sender_name = uuid_to_name(msg.sender).await?;
 
-    let size_str = convert(msg.size as f64);
+    let size_str = format!("{}", HumanBytes(msg.size));
     let confirm_msg = format!(
         "{} wants to send you the file '{}' of size {}. Accept? (y/n)",
         sender_name.green(),
@@ -51,7 +51,7 @@ pub async fn on_file_question(data: &mut Vec<u8>) -> anyhow::Result<()> {
 }
 
 pub async fn check_accepted(msg: FileQuestionMsg) -> anyhow::Result<bool> {
-    let FileQuestionMsg { filename, receiver, size, sender, uuid } = msg;
+    let FileQuestionMsg { filename, receiver, size, sender, uuid, hash } = msg;
 
     let accepted = wait_confirm().await?;
     if !accepted {
@@ -121,12 +121,16 @@ pub async fn check_accepted(msg: FileQuestionMsg) -> anyhow::Result<bool> {
         return Ok(false);
     }
 
+    let threads = get_concurrent_threads().await;
+    let plural = if threads > 1 { "s" } else { "" };
+
     let path = path.unwrap();
     let allowed = format!(
-        "Receiving '{}'{} (uuid: {})",
+        "Receiving '{}'{} (uuid: {}) with {}...",
         filename.bright_green(),
         "...".yellow(),
-        uuid
+        uuid,
+        format!("{} thread{}", threads, plural).bold()
     );
     println!("{}", allowed.green());
 
@@ -136,6 +140,7 @@ pub async fn check_accepted(msg: FileQuestionMsg) -> anyhow::Result<bool> {
         sender,
         size,
         path: Some(path),
+        hash
     };
 
     trace!("Waiting for pending files...");

@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::anyhow;
+use indicatif::HumanBytes;
 use log::{debug, trace, warn};
 use openssl::{pkey::Public, rsa::Rsa};
 use packets::{
@@ -86,8 +87,8 @@ impl DownloadWorker {
         if left < size {
             eprintln!(
                 "Not enough size on your disk left ({} left, {} needed)",
-                pretty_bytes::converter::convert(left as f64),
-                pretty_bytes::converter::convert(file.size as f64)
+                HumanBytes(left),
+                HumanBytes(file.size)
             );
             return Err(anyhow!("Size of file does not match with metadata"));
         }
@@ -123,7 +124,6 @@ impl DownloadWorker {
         let file_lock_arc = self.file_lock.clone();
 
         let handle: JoinHandle<anyhow::Result<()>> = tokio::spawn(async move {
-            let tx = tx.read().await;
             let to_run = || async {
                 let max_threads = get_max_chunks(size);
 
@@ -155,8 +155,11 @@ impl DownloadWorker {
                     hex::encode(uuid_signature)
                 );
 
-                let response = download_file(url, &tx, i).await?;
+                let tx_state = tx.read().await;
+                let response = download_file(url, &tx_state, i).await;
+                drop(tx_state);
 
+                let response = response?;
                 // Signature is validated in deserialize, so its fine
                 let deserialized = ChunkMsg::deserialize(&response, &sender_key, &keypair);
                 if deserialized.is_err() {

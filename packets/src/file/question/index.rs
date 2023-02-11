@@ -9,8 +9,8 @@ use crate::{
         converter::{str_to_decque, uuid_to_decque},
         modes::Modes,
         tools::{u64_from_vec, uuid_from_vec},
-        vec::{decque_to_vec, vec_to_decque},
-    },
+        vec::{decque_to_vec, vec_to_decque, extract_vec},
+    }, consts::MSG_DIGEST,
 };
 
 #[derive(Debug, Clone)]
@@ -19,6 +19,8 @@ pub struct FileQuestionMsg {
     pub sender: Uuid,
     pub receiver: Uuid,
     pub uuid: Uuid,
+    // Uses sha256 so 32 bytes
+    pub hash: Vec<u8>,
     pub size: u64
 }
 
@@ -31,11 +33,13 @@ impl ByteMessage for FileQuestionMsg {
         let mut b_receiver = uuid_to_decque(&self.receiver);
         let mut b_sender = uuid_to_decque(&self.sender);
         let mut b_size = vec_to_decque(self.size.to_le_bytes().to_vec());
+        let mut b_hash = vec_to_decque(self.hash.clone());
 
         merged.append(&mut b_uuid);
         merged.append(&mut b_receiver);
         merged.append(&mut b_sender);
         merged.append(&mut b_size);
+        merged.append(&mut b_hash);
         merged.append(&mut b_filename);
 
         return Modes::SendFileQuestion.get_send(&decque_to_vec(merged));
@@ -49,6 +53,7 @@ impl ByteMessage for FileQuestionMsg {
         let receiver = uuid_from_vec(&mut data)?;
         let sender = uuid_from_vec(&mut data)?;
         let size = u64_from_vec(&mut data)?;
+        let hash = extract_vec(0..MSG_DIGEST.size(), &mut data)?;
 
         let filename = String::from_utf8(data)?;
 
@@ -57,7 +62,8 @@ impl ByteMessage for FileQuestionMsg {
             uuid,
             sender,
             receiver,
-            size
+            size,
+            hash
         };
 
         trace!("FileQuestion info is {:?}", msg);

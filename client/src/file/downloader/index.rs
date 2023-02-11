@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Write, ops::Add, sync::Arc};
+use std::{collections::HashMap, fmt::Write, sync::Arc};
 
 use anyhow::anyhow;
 use colored::Colorize;
@@ -8,13 +8,19 @@ use log::{trace, warn};
 use openssl::{pkey::Public, rsa::Rsa};
 use packets::file::{processing::tools::get_max_chunks, types::FileInfo};
 use tokio::{
-    sync::{Mutex, RwLock, mpsc::{self, UnboundedSender}},
+    sync::{
+        mpsc::{self, UnboundedSender},
+        Mutex, RwLock,
+    },
     task::JoinHandle,
 };
 use tokio_stream::{wrappers::UnboundedReceiverStream, StreamExt};
 use uuid::Uuid;
 
-use crate::{util::{consts::CONCURRENT_THREADS, tools::get_avg}, file::tools::WorkerProgress};
+use crate::{
+    file::tools::{get_hash_progress, WorkerProgress},
+    util::{arcs::get_concurrent_threads, tools::get_avg},
+};
 
 use super::worker::DownloadWorker;
 
@@ -28,7 +34,6 @@ type ArcWorkerRx = Arc<RwLock<WorkerRx>>;
 
 type UpdateThread = Arc<Mutex<Option<JoinHandle<()>>>>;
 type FileLockType = Arc<Mutex<bool>>;
-type ChunksCompletedType = Arc<RwLock<u64>>;
 
 type ProgressMap = HashMap<u64, f32>;
 type ProgressType = Arc<RwLock<ProgressMap>>;
@@ -38,7 +43,6 @@ pub struct Downloader {
     info: FileInfo,
     uuid: Uuid,
 
-    chunks_completed: ChunksCompletedType,
     threads: Option<u64>,
 
     workers: WorkersType,
@@ -51,7 +55,7 @@ pub struct Downloader {
     file_lock: FileLockType,
 
     worker_tx: ArcWorkerTx,
-    worker_rx: ArcWorkerRx
+    worker_rx: ArcWorkerRx,
 }
 
 impl Downloader {
@@ -63,7 +67,6 @@ impl Downloader {
             uuid: uuid.clone(),
             info: info.clone(),
             threads: None,
-            chunks_completed: Arc::new(RwLock::new(0)),
             workers: Arc::new(RwLock::new(Vec::new())),
             progress: Arc::new(RwLock::new(HashMap::new())),
             sender_pubkey,
@@ -82,7 +85,6 @@ impl Downloader {
 
         drop(state);
 
-
         let info = self.info.clone();
         let workers = self.workers.clone();
         let uuid = self.uuid.clone();
@@ -90,44 +92,53 @@ impl Downloader {
         let file_lock = self.file_lock.clone();
         let worker_tx = self.worker_tx.clone();
 
-        let to_spawn = std::cmp::min(CONCURRENT_THREADS, max_chunks);
+        let to_spawn = get_concurrent_threads().await.min(max_chunks);
         self.threads = Some(to_spawn);
 
-            if info.path.is_none() {
-                return Err(anyhow!(
-                    "Can not initialize downloader when download path is none."
-                ));
-            }
+        if info.path.is_none() {
+            return Err(anyhow!(
+                "Can not initialize downloader when download path is none."
+            ));
+        }
 
-            trace!("Waiting for read...");
-            let state = workers.read().await;
+        trace!("Waiting for read...");
+        let state = workers.read().await;
 
-            if !state.is_empty() {
-                drop(state);
-                return Err(anyhow!("Workers already spawned."));
-            }
+        if !state.is_empty() {
             drop(state);
+            return Err(anyhow!("Workers already spawned."));
+        }
+        drop(state);
 
-            trace!("Spawning {} workers", to_spawn);
-            let mut state = workers.write().await;
-            for i in 0..to_spawn {
-                let worker = DownloadWorker::new(
-                    i,
-                    uuid,
-                    sender_pubkey.clone(),
-                    info.clone(),
-                    file_lock.clone(),
-                    worker_tx.clone()
-                )?;
-                state.push(worker);
-            }
+        trace!("Spawning {} workers", to_spawn);
+        let mut state = workers.write().await;
+        for i in 0..to_spawn {
+            let worker = DownloadWorker::new(
+                i,
+                uuid,
+                sender_pubkey.clone(),
+                info.clone(),
+                file_lock.clone(),
+                worker_tx.clone(),
+            )?;
+            state.push(worker);
+        }
 
-            drop(state);
-            Ok(())
-
+        drop(state);
+        Ok(())
     }
 
     pub async fn start_downloading(&self, chunk: u64) -> anyhow::Result<()> {
+        let prog = self.progress.read().await;
+        if prog.contains_key(&chunk) {
+            warn!("Already downloading chunk {}", chunk);
+
+            drop(prog);
+            return Ok(());
+        }
+
+        drop(prog);
+
         trace!("Waiting to download chunk {}", chunk);
         let mut state = self.workers.write().await;
         let futures = state.iter_mut().map(|e| {
@@ -160,10 +171,14 @@ impl Downloader {
             ));
         }
 
+        let mut prog = self.progress.write().await;
         trace!("Starting worker with id {}", chunk);
         let worker = worker.unwrap();
         let res = worker.start(chunk);
         drop(state);
+
+        prog.insert(chunk, 0.0);
+        drop(prog);
 
         res?;
         Ok(())
@@ -171,7 +186,6 @@ impl Downloader {
 
     fn listen_for_progress_updates(&self) -> anyhow::Result<JoinHandle<()>> {
         let prog_arc = self.progress.clone();
-        let chunks_arc = self.chunks_completed.clone();
         let file_arc = Arc::new(RwLock::new(self.info.clone()));
         let max_size = self.info.size;
         let worker_rx_arc = self.worker_rx.clone();
@@ -184,34 +198,44 @@ impl Downloader {
             .progress_chars("#>-"));
 
             let mut worker_rx = worker_rx_arc.write().await;
-            println!("Listening for updates.");
             while let Some(el) = worker_rx.next().await {
                 let WorkerProgress { chunk, progress } = el;
 
                 let mut state = prog_arc.write().await;
 
-                println!("New Chunk {} at {}", chunk, progress);
+                let old_prog = state.get(&chunk).unwrap_or(&(0 as f32)).to_owned();
                 state.insert(chunk, progress);
-                if progress >= 1.0 {
+                let mut downloader_done = false;
+                if progress >= 1.0 && old_prog < 1.0 as f32 {
                     trace!("Downloader worker {} finished.", chunk);
-                    Downloader::on_worker_done(&chunks_arc, &file_arc).await;
+                    let e = Downloader::on_worker_done(&state, &file_arc, &pb).await;
+                    if e.is_err() {
+                        let err = e.unwrap_err();
+                        println!(
+                            "{}",
+                            format!("Could not send on worker_done update: {}", err).red()
+                        );
+                    } else {
+                        downloader_done = e.unwrap();
+                    }
                 }
 
-                Downloader::print_update(&pb, &state, max_size);
+                if !downloader_done {
+                    Downloader::print_update(&pb, &state, max_size);
+                }
                 drop(state);
             }
-            println!("Done listening.");
             drop(worker_rx);
         });
 
         return Ok(e);
     }
 
-
     fn print_update(pb: &ProgressBar, progress: &ProgressMap, max_size: u64) {
         let mut percentages: Vec<f32> = progress.iter().map(|e| e.1.clone()).collect();
+        let max_chunks = get_max_chunks(max_size);
 
-        let left = max_size - progress.len() as u64;
+        let left = max_chunks - progress.len() as u64;
         for _ in 0..left {
             percentages.push(0 as f32);
         }
@@ -223,22 +247,64 @@ impl Downloader {
         }
 
         let avg = avg.unwrap();
-        println!("Avg is {}", avg);
         let curr = std::cmp::min(max_size, (avg * (max_size as f32)).floor() as u64);
 
         pb.set_position(curr);
     }
 
-    async fn on_worker_done(chunks_completed: &Arc<RwLock<u64>>, file_arc: &Arc<RwLock<FileInfo>>) {
-        let mut s = chunks_completed.write().await;
-        *s = s.add(1 as u64);
+    async fn get_chunks_completed(map: &ProgressMap) -> usize {
+        let done: Vec<&f32> = map
+            .values()
+            .filter(|e| e.to_owned() >= &(1.0 as f32))
+            .collect();
+        return done.len();
+    }
 
-        let curr_completed = s.clone();
-        drop(s);
+    async fn get_hash_progress(file: &FileInfo) -> anyhow::Result<Vec<u8>> {
+        let path = file.path.clone();
+        if path.is_none() {
+            return Err(anyhow!(
+                "Could not check for hash because local path is none."
+            ));
+        }
 
+        let path = path.unwrap();
+        let path = path.to_str().unwrap();
+
+        let hash = get_hash_progress(path.to_owned()).await?;
+
+        return Ok(hash);
+    }
+
+    async fn on_worker_done(
+        map: &ProgressMap,
+        file_arc: &Arc<RwLock<FileInfo>>,
+        pb: &ProgressBar,
+    ) -> anyhow::Result<bool> {
         let s = file_arc.read().await;
-        let max_chunks = get_max_chunks(s.size);
-        if curr_completed >= max_chunks {
+        let max_chunks = get_max_chunks(s.size) as usize;
+        let curr_completed = Downloader::get_chunks_completed(map).await;
+
+        if curr_completed < max_chunks {
+            drop(s);
+            return Ok(false);
+        }
+
+        pb.finish_and_clear();
+        println!(
+            "{}",
+            format!("Calculating hash for downloaded file...").yellow()
+        );
+        let curr_hash = Downloader::get_hash_progress(&s).await?;
+
+        let expected = (&s.hash).clone();
+
+        let is_valid = curr_hash == expected;
+        if is_valid {
+            println!("{}",
+                    format!("Hashes {} and {} match.", hex::encode(expected), hex::encode(curr_hash))
+                    .green()
+            );
             println!(
                 "{}",
                 format!(
@@ -247,8 +313,19 @@ impl Downloader {
                 )
                 .green()
             );
+        } else {
+            println!(
+                "{}",
+                format!(
+                    "Could not download file as hashes did not match (expected {} got {})",
+                    hex::encode(expected),
+                    hex::encode(curr_hash)
+                )
+                .red()
+            )
         }
 
         drop(s);
+        return Ok(true);
     }
 }

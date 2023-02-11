@@ -3,7 +3,6 @@ use packets::{
     file::{ processing::{abort::ChunkAbortMsg, downloaded::ChunkDownloadedMsg}, types::FileInfo},
     types::ByteMessage,
 };
-use log::trace;
 use tokio_tungstenite::tungstenite::Message;
 use crate::util::{consts::FILE_UPLOADS, msg::send_msg, tools::uuid_to_name};
 
@@ -23,11 +22,10 @@ pub async fn on_chunk_downloaded(data: &mut Vec<u8>) -> anyhow::Result<()> {
     }
 
     let uploader = uploader.unwrap();
-    let completed = uploader.get_chunks_completed().await;
-    let max_chunks = uploader.get_max_chunks();
+    let is_done = uploader.is_done().await;
 
 
-    if completed >= max_chunks {
+    if is_done {
         let FileInfo {filename, receiver, ..} = uploader.get_file_info();
         let receiver_name = uuid_to_name(receiver).await?;
 
@@ -35,11 +33,11 @@ pub async fn on_chunk_downloaded(data: &mut Vec<u8>) -> anyhow::Result<()> {
         return Ok(());
     }
 
+    let max_chunks = uploader.get_max_chunks();
     let max_chunks_size = usize::try_from(max_chunks)?;
-    let processing = uploader.get_chunks_processing().await;
+    let processing = uploader.get_chunks_spawned().await;
     let chunks_left = max_chunks_size - processing.len();
 
-    trace!("ChunksLeft: {} total size {}", chunks_left, max_chunks_size);
     if chunks_left <= 0 { return Ok(()) }
 
     uploader.on_next().await?;

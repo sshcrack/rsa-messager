@@ -2,7 +2,7 @@ use anyhow::anyhow;
 use openssl::{rsa::Rsa, pkey::Private};
 use uuid::Uuid;
 
-use super::consts::{RECEIVER, CURR_ID, KEYPAIR, BASE_URL, USE_TLS};
+use super::consts::{RECEIVER, CURR_ID, KEYPAIR, BASE_URL, USE_TLS, CONCURRENT_THREADS};
 
 
 pub async fn get_curr_keypair() -> anyhow::Result<Rsa<Private>> {
@@ -57,4 +57,12 @@ pub async fn use_tls() -> bool {
     let out = state.clone();
 
     return out;
+}
+
+pub async fn get_concurrent_threads() -> u64 {
+    let state = CONCURRENT_THREADS.read().await;
+    let threads = state.clone();
+
+    drop(state);
+    return threads;
 }

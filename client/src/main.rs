@@ -10,8 +10,8 @@ use util::consts::{RECEIVE_TX, RECEIVE_RX};
 use crate::encryption::rsa::generate;
 use crate::msg::receive::index::receive_msgs;
 use crate::msg::send::index::send_msgs;
-use crate::util::consts::{BASE_URL, KEYPAIR, TX_CHANNEL, USE_TLS};
-use crate::util::types::{Args};
+use crate::util::consts::{BASE_URL, KEYPAIR, TX_CHANNEL, USE_TLS, CONCURRENT_THREADS};
+use crate::util::types::Args;
 use crate::web::prefix::get_ws_protocol;
 
 mod encryption;
@@ -57,6 +57,11 @@ async fn _async_main() -> anyhow::Result<()> {
 
     let mut state = BASE_URL.write().await;
     *state = base_url.clone();
+
+    drop(state);
+
+    let mut state = CONCURRENT_THREADS.write().await;
+    *state = args.threads.unwrap_or(64 as usize) as u64;
 
     drop(state);
 

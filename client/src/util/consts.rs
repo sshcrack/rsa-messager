@@ -6,9 +6,8 @@ use lazy_static::lazy_static;
 
 use super::types::*;
 
-pub const CONCURRENT_THREADS: u64 = 64;
-
 lazy_static! {
+    pub static ref CONCURRENT_THREADS: ConcurrentThreads = Arc::new(RwLock::new(64));
     pub static ref BASE_URL: BaseUrl = Arc::new(RwLock::new("".to_string()));
     pub static ref USE_TLS: UseTls = Arc::new(RwLock::new(false));
     pub static ref CURR_ID: UserId = UserId::default();

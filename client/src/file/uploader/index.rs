@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Write, ops::Add, sync::Arc};
+use std::{collections::HashMap, fmt::Write, sync::Arc};
 
 use anyhow::anyhow;
 use futures_util::future::select_all;
@@ -7,7 +7,10 @@ use log::{trace, warn};
 use openssl::{pkey::Public, rsa::Rsa};
 use packets::file::{processing::tools::get_max_chunks, types::FileInfo};
 use tokio::{
-    sync::{Mutex, RwLock, mpsc::{self, UnboundedSender}},
+    sync::{
+        mpsc::{self, UnboundedSender},
+        Mutex, RwLock,
+    },
     task::JoinHandle,
 };
 use tokio_stream::{wrappers::UnboundedReceiverStream, StreamExt};
@@ -15,12 +18,10 @@ use uuid::Uuid;
 
 use crate::{
     file::tools::WorkerProgress,
-    util::{consts::CONCURRENT_THREADS, tools::get_avg},
+    util::{tools::get_avg, arcs::get_concurrent_threads},
 };
 
 use super::worker::UploadWorker;
-type ChunksCompletedType = Arc<RwLock<u64>>;
-type ChunksProcessingType = Arc<RwLock<Vec<u64>>>;
 type WorkersType = Arc<RwLock<Vec<UploadWorker>>>;
 type ProgressMap = HashMap<u64, f32>;
 type ProgressType = Arc<RwLock<ProgressMap>>;
@@ -31,8 +32,6 @@ pub struct Uploader {
     info: FileInfo,
     uuid: Uuid,
 
-    chunks_completed: ChunksCompletedType,
-    chunks_processing: ChunksProcessingType,
     threads: Option<u64>,
 
     workers: WorkersType,
@@ -55,12 +54,10 @@ impl Uploader {
             uuid: uuid.clone(),
             info: file.clone(),
             threads: None,
-            chunks_completed: Arc::new(RwLock::new(0)),
             workers: Arc::new(RwLock::new(Vec::new())),
             progress: Arc::new(RwLock::new(HashMap::new())),
             receiver_key,
             update_thread: Arc::new(Mutex::new(None)),
-            chunks_processing: Arc::new(RwLock::new(Vec::new())),
             worker_rx: Arc::new(RwLock::new(worker_rx)),
             worker_tx: Arc::new(RwLock::new(worker_tx)),
         };
@@ -88,12 +85,12 @@ impl Uploader {
         *state = Some(handle);
 
         drop(state);
-        let to_spawn = std::cmp::min(CONCURRENT_THREADS, max_threads);
+        let to_spawn = get_concurrent_threads().await.min(max_threads);
 
         self.threads = Some(to_spawn);
         trace!("Spawning {} workers", to_spawn);
         let mut state = self.workers.write().await;
-        let mut state_processing = self.chunks_processing.write().await;
+        let mut state_prog = self.progress.write().await;
 
         for i in 0..to_spawn {
             trace!("Spawning upload worker with Thread_Indx {}", i);
@@ -108,23 +105,24 @@ impl Uploader {
             let e = worker.start(i).await;
             if e.is_err() {
                 drop(state);
-                drop(state_processing);
+                drop(state_prog);
                 return Err(e.unwrap_err());
             }
 
             state.push(worker);
-            state_processing.push(i);
+            state_prog.insert(i, 0 as f32);
         }
         trace!("Dropping state workers...");
         drop(state);
-        drop(state_processing);
+        drop(state_prog);
         Ok(())
     }
 
     fn print_update(pb: &ProgressBar, progress: &ProgressMap, max_size: u64) {
-        let mut percentages: Vec<f32> = progress.iter().map(|e| e.1.clone()).collect();
+        let max_chunks = get_max_chunks(max_size);
+        let mut percentages: Vec<f32> = progress.values().map(|e| e.clone()).collect();
 
-        let left = max_size - progress.len() as u64;
+        let left = max_chunks - progress.len() as u64;
         for _ in 0..left {
             percentages.push(0 as f32);
         }
@@ -136,7 +134,6 @@ impl Uploader {
         }
 
         let avg = avg.unwrap();
-        println!("Avg is {}", avg);
         let curr = std::cmp::min(max_size, (avg * (max_size as f32)).floor() as u64);
 
         pb.set_position(curr);
@@ -144,10 +141,10 @@ impl Uploader {
 
     fn listen_for_progress_update(&self) -> anyhow::Result<JoinHandle<()>> {
         let temp = self.progress.clone();
-        let temp2 = self.chunks_completed.clone();
         let worker_rx_arc = self.worker_rx.clone();
 
         let max_size = self.info.size;
+
         let e = tokio::spawn(async move {
             let pb = ProgressBar::new(max_size);
             pb.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")
@@ -156,19 +153,15 @@ impl Uploader {
             .progress_chars("#>-"));
 
             let mut worker_rx = worker_rx_arc.write().await;
-            println!("Listening for updates.");
             while let Some(el) = worker_rx.next().await {
                 let WorkerProgress { chunk, progress } = el;
+                let progress = progress.min(1 as f32);
 
                 let mut state = temp.write().await;
-                println!("New Chunk {} at {}", chunk, progress);
+                let old_prog = state.get(&chunk).unwrap_or(&(0 as f32)).to_owned();
                 state.insert(chunk, progress);
 
-                if progress == 1.0 {
-                    let mut s = temp2.write().await;
-                    *s = s.add(1 as u64);
-
-                    drop(s);
+                if progress >= 1.0 && old_prog < 1.0 {
                     trace!("Upload worker {} finished.", chunk);
                 }
 
@@ -178,15 +171,14 @@ impl Uploader {
             drop(worker_rx);
         });
 
-        println!("Done listening.");
-        return Ok(e)
+        return Ok(e);
     }
 
     pub async fn on_next(&self) -> anyhow::Result<()> {
         let mut chunks_left = None;
-        let state = self.chunks_processing.read().await;
+        let state = self.progress.read().await;
         for i in 0..self.get_max_chunks() {
-            if !state.contains(&i) {
+            if state.get(&i).is_none() {
                 chunks_left = Some(i);
                 break;
             }
@@ -234,8 +226,8 @@ impl Uploader {
         }
 
         let worker = worker.unwrap();
-        let mut s = self.chunks_processing.write().await;
-        s.push(chunk);
+        let mut s = self.progress.write().await;
+        s.insert(chunk, 0 as f32);
 
         drop(s);
 
@@ -247,24 +239,51 @@ impl Uploader {
     }
 
     pub fn get_max_chunks(&self) -> u64 {
-        return get_max_chunks(self.info.size);
+        return get_max_chunks(self.info.size) as u64;
     }
 
     pub fn get_file_info(&self) -> FileInfo {
         return self.info.clone();
     }
 
-    pub async fn get_chunks_completed(&self) -> u64 {
-        let state = self.chunks_completed.read().await;
-        let completed = state.clone();
+    pub async fn is_done(&self) -> bool {
+        let max_chunks = self.get_max_chunks();
+        let completed = self.get_chunks_completed().await;
 
-        drop(state);
-        return completed;
+        return max_chunks as usize == completed;
     }
 
+    pub async fn get_chunks_completed(&self) -> usize {
+        let state = self.progress.read().await;
+        let done: Vec<&f32> = state
+            .values()
+            .filter(|e| e.to_owned().to_owned() >= 1 as f32)
+            .collect();
+        let done = done.len();
+
+        drop(state);
+        return done;
+    }
+
+    #[allow(dead_code)]
     pub async fn get_chunks_processing(&self) -> Vec<u64> {
-        let state = self.chunks_processing.read().await;
-        let processing = state.clone();
+        let state = self.progress.read().await;
+        let processing: Vec<u64> = state
+            .iter()
+            .filter(|e| e.1.to_owned().to_owned() < 1 as f32)
+            .map(|e| e.0.to_owned())
+            .collect();
+
+        drop(state);
+        return processing;
+    }
+
+    pub async fn get_chunks_spawned(&self) -> Vec<u64> {
+        let state = self.progress.read().await;
+        let processing: Vec<u64> = state
+            .iter()
+            .map(|e| e.0.to_owned())
+            .collect();
 
         drop(state);
         return processing;

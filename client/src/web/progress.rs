@@ -1,14 +1,24 @@
 use anyhow::anyhow;
-use futures_util::io::BufReader;
-use futures_util::AsyncBufReadExt;
-use surf::Response;
+use bytes::Bytes;
+use futures::{io::BufReader, stream};
+use futures::{AsyncBufReadExt, TryStreamExt};
+use futures_util::StreamExt;
+use log::warn;
+use packets::consts::ONE_MB_SIZE;
 use std::{cmp::min, sync::Arc};
-use tokio::sync::{RwLock, mpsc::UnboundedSender};
+use surf::Body;
+use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::RwLock;
+use tokio::sync::RwLock as TokioRwLock;
 
 use crate::file::tools::WorkerProgress;
 
-pub async fn download_file(url: String, sender: &UnboundedSender<WorkerProgress>, chunk_index: u64) -> anyhow::Result<Vec<u8>> {
-    let arc = Arc::new(RwLock::new(sender));
+pub async fn download_file(
+    url: String,
+    sender: &UnboundedSender<WorkerProgress>,
+    chunk_index: u64,
+) -> anyhow::Result<Vec<u8>> {
+    let arc = Arc::new(TokioRwLock::new(sender));
 
     let res = surf::get(url.clone())
         .await
@@ -35,7 +45,7 @@ pub async fn download_file(url: String, sender: &UnboundedSender<WorkerProgress>
 
     let mut buffer = Vec::new();
     let stream = BufReader::new(res);
-    let arc_stream = Arc::new(RwLock::new(stream));
+    let arc_stream = Arc::new(TokioRwLock::new(stream));
 
     let mut downloaded: u64 = 0;
 
@@ -62,17 +72,16 @@ pub async fn download_file(url: String, sender: &UnboundedSender<WorkerProgress>
         let state = arc.read().await;
         let e = state.send(WorkerProgress {
             progress: prog,
-            chunk: chunk_index
+            chunk: chunk_index,
         });
         drop(state);
         e?;
     }
 
-
     let state = arc.read().await;
     let e = state.send(WorkerProgress {
         progress: 1 as f32,
-        chunk: chunk_index
+        chunk: chunk_index,
     });
     drop(state);
     e?;
@@ -83,36 +92,54 @@ pub async fn download_file(url: String, sender: &UnboundedSender<WorkerProgress>
 pub async fn upload_file(
     url: String,
     buf: Vec<u8>,
-    //sender: Sender<f32>
-) -> anyhow::Result<Response> {
-    //TODO
-    /*
-    let arc = Arc::new(RwLock::new(sender));
+    sender_arc: Arc<RwLock<UnboundedSender<WorkerProgress>>>,
+    offset: f32,
+    index: u64,
+) -> anyhow::Result<surf::Response> {
+    let uploaded = Arc::new(RwLock::new(0));
 
-    let total_size = buf.len();
-    let mut uploaded = 0;
+    let e = buf.clone();
+    let chunk_size = buf.len();
 
-    let mut reader_stream = buf.chunks(ONE_MB_SIZE.try_into().unwrap()).map(|e| e.to_vec());
+    let mut cursor = stream::iter(e).chunks(std::cmp::min(ONE_MB_SIZE as usize, buf.len()));
+
+    let sender = sender_arc.write_owned().await;
+
     let stream = async_stream::stream! {
-        let state = arc.read().await;
-        while let Some(chunk) = reader_stream.next() {
-            let new = min(uploaded + (chunk.len() as usize), total_size);
-            uploaded = new;
-            state.send((new as f32) / (total_size as f32));
+        while let Some(chunk) = cursor.next().await {
+            let l = chunk.len();
+            yield Ok(Bytes::from(chunk)) as Result<Bytes, std::io::Error>;
 
-            yield Ok(chunk) as Result<Vec<u8>, anyhow::Error>;
+            let mut s = uploaded.write().await;
+            *s += l;
+
+            let curr = s.clone();
+            drop(s);
+
+
+            let prog = ((curr as f32) / (chunk_size as f32) * offset ) + offset;
+
+            let e = sender.send(WorkerProgress { chunk: index, progress: prog });
+            if e.is_err() {
+                warn!("Could not update progress bar (send): {}", e.unwrap_err());
+                return;
+            }
+
         }
 
-        state.send(1 as f32);
-        drop(state);
-    }; */
+        drop(sender);
+    };
 
-    let e = surf::post(url).body_bytes(buf).send().await;
+    let reader = Box::pin(stream.into_async_read());
+    let e = surf::post(url)
+        .body(Body::from_reader(reader, Some(buf.len())))
+        .send()
+        .await;
+
     if e.is_err() {
         let err = e.unwrap_err();
-        let err: anyhow::Error = err.into_inner();
 
-        return Err(err);
+        return Err(anyhow::anyhow!(err));
     }
 
     return Ok(e.unwrap());

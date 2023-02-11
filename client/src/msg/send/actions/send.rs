@@ -6,7 +6,7 @@ use packets::{file::{question::index::FileQuestionMsg, types::FileInfo}, types::
 use tokio_tungstenite::tungstenite::Message;
 use uuid::Uuid;
 
-use crate::{util::{tools::uuid_to_name, arcs::{get_receiver, get_curr_id}, msg::{send_msg, print_from_msg}, consts::PENDING_FILES}};
+use crate::{util::{tools::uuid_to_name, arcs::{get_receiver, get_curr_id}, msg::{send_msg, print_from_msg}, consts::PENDING_FILES}, file::tools::get_hash_progress};
 
 pub async fn on_send(line: &str) -> anyhow::Result<()> {
     let filename = line.split(" ");
@@ -41,12 +41,16 @@ pub async fn on_send(line: &str) -> anyhow::Result<()> {
     let filename = filename.unwrap().to_str().unwrap();
     let filename = filename.to_string();
 
+    println!("{}", format!("Calculating hash for file...").yellow());
+
+    let hash = get_hash_progress(given_path.to_str().unwrap().to_owned()).await?;
     let to_send = FileQuestionMsg {
         filename: filename.clone(),
         sender: curr_id,
         receiver,
         uuid,
-        size
+        size,
+        hash: hash.clone()
     }.serialize();
 
     send_msg(Message::Binary(to_send)).await?;
@@ -57,6 +61,7 @@ pub async fn on_send(line: &str) -> anyhow::Result<()> {
         sender: curr_id,
         receiver,
         size,
+        hash,
         path: Some(given_path.to_path_buf())
     };
 

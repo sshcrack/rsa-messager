@@ -100,7 +100,6 @@ impl UploadWorker {
         drop(state);
 
         let handle: JoinHandle<anyhow::Result<()>> = tokio::spawn(async move {
-
             let to_run = || async {
                 let max_chunks = get_max_chunks(size);
 
@@ -178,7 +177,9 @@ impl UploadWorker {
                 }.serialize(&receiver_key)?;
                 trace!("Uploading chunk {} to {} with size {}...", i, url, body.len());
 
-                let mut res = upload_file(url, body).await?;
+                let res = upload_file(url, body,  tx.clone(), 0.5, chunk_index).await;
+                let mut res = res?;
+
                 let status = res.status();
                 let e = res.body_string().await;
                 if status != 200 {

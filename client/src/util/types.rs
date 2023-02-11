@@ -13,6 +13,7 @@ use uuid::Uuid;
 use crate::file::{uploader::index::Uploader, downloader::index::Downloader};
 
 pub type Keypair = Arc<RwLock<Option<Rsa<Private>>>>;
+pub type ConcurrentThreads= Arc<RwLock<u64>>;
 pub type BaseUrl = Arc<RwLock<String>>;
 pub type UseTls = Arc<RwLock<bool>>;
 pub type SendDisabled = Arc<AtomicBool>;
@@ -58,6 +59,10 @@ pub struct Args {
     /// Name of the client
     #[arg(short = 'n', long)]
     pub name: Option<String>,
+
+    /// Threads to use when downloading
+    #[arg(short = 't', long)]
+    pub threads: Option<usize>,
 
     #[command(subcommand)]
     action: Option<Action>,
