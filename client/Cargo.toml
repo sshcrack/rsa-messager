@@ -1,7 +1,16 @@
 [package]
-name = "client"
+name = "rsa-messenger-client"
 version = "0.1.0"
 edition = "2021"
+homepage = "https://sshcrack.me"
+repository = "https://github.com/sshcrack/rsa-messenger"
+description = "Send files & messages across the internet using RSA / AES. Fast and secure transfer by checking for hashes. This is the client part of the application."
+license = "MIT"
+
+[[bin]]
+bench = false
+path = "src/main.rs"
+name = "rsa-msg"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

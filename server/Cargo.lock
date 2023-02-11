@@ -929,6 +929,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "rsa-messager-server"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "colorize",
+ "futures-util",
+ "hex",
+ "lazy_static",
+ "log",
+ "openssl",
+ "packets",
+ "pretty_env_logger",
+ "readonly",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "uuid",
+ "warp",
+]
+
+[[package]]
 name = "rustc-demangle"
 version = "0.1.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1022,30 +1046,6 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
-]
-
-[[package]]
-name = "server"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "colorize",
- "futures-util",
- "hex",
- "lazy_static",
- "log",
- "openssl",
- "packets",
- "pretty_env_logger",
- "readonly",
- "serde",
- "serde_json",
- "tokio",
- "tokio-stream",
- "tokio-util",
- "uuid",
- "warp",
 ]
 
 [[package]]

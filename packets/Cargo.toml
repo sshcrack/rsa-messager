@@ -1,7 +1,11 @@
 [package]
-name = "packets"
+name = "rsa-messenger-packets"
 version = "0.1.0"
 edition = "2021"
+description = "A helper crate for rsa-messenger-client as well as rsa-messenger-server."
+homepage = "https://sshcrack.me"
+repository = "https://github.com/sshcrack/rsa-messenger"
+license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

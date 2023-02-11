@@ -36,10 +36,15 @@ pub async fn send_msgs() -> anyhow::Result<()> {
     loop {
         let res = main_loop(&stdin, &tx).await;
         if res.is_err() {
+            let err = res.unwrap_err();
+            if err.to_string().contains("Operation was interrupted by the user") {
+                std::process::exit(0);
+            }
+
             eprintln!("Error occurred in main loop send thread: ");
             eprintln!(
                 "{}",
-                format!("{:?}", res.unwrap_err()).on_bright_red().black()
+                format!("{:?}", err).on_bright_red().black()
             );
         } 
     }

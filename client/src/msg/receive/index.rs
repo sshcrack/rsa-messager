@@ -23,10 +23,15 @@ pub async fn receive_msgs(mut rx: RXChannel) -> anyhow::Result<()> {
         tokio::spawn(async move {
             let res = handle(msg).await;
             if res.is_err() {
+                let err = res.unwrap_err();
+                if err.to_string().contains("Operation was interrupted by the user") {
+                    std::process::exit(0);
+                }
+
                 eprintln!("Error occurred while processing message packet: ");
                 eprintln!(
                     "{}",
-                    format!("{:?}", res.unwrap_err()).on_bright_red().black()
+                    format!("{:?}", err).on_bright_red().black()
                 );
             }
         });
