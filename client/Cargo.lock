@@ -1466,19 +1466,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b7820b9daea5457c9f21c69448905d723fbd21136ccf521748f23fd49e723ee"
 
 [[package]]
-name = "packets"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "hex",
- "lazy_static",
- "log",
- "openssl",
- "tokio",
- "uuid",
-]
-
-[[package]]
 name = "parking"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1823,7 +1810,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rsa-messager-client"
+name = "rsa-messenger-client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -1844,9 +1831,9 @@ dependencies = [
  "lazy_static",
  "log",
  "openssl",
- "packets",
  "pretty_env_logger",
  "reqwest",
+ "rsa-messenger-packets",
  "serde",
  "serde_json",
  "surf",
@@ -1855,6 +1842,21 @@ dependencies = [
  "tokio-tungstenite",
  "tokio-util",
  "url",
+ "uuid",
+]
+
+[[package]]
+name = "rsa-messenger-packets"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b2504b8f8d1c64ea45ebdd44b8d4ba5f12fc9705e073e9ff23fd536e7fbdfca"
+dependencies = [
+ "anyhow",
+ "hex",
+ "lazy_static",
+ "log",
+ "openssl",
+ "tokio",
  "uuid",
 ]
 
