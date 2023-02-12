@@ -13,6 +13,6 @@ license = "MIT"
 anyhow = "1.0.68"
 lazy_static = "1.4.0"
 log = { version = "0.4.17", default-features = false }
-openssl = "0.10.45"
+openssl = { version = "0.10.45", features = [], default-features = false}
 uuid = "1.2.2"
 tokio = "1.25.0"
