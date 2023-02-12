@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Write, sync::Arc};
+use std::{collections::HashMap, fmt::Write, sync::Arc, time::Duration};
 
 use anyhow::anyhow;
 use colored::Colorize;
@@ -56,6 +56,7 @@ pub struct Downloader {
 
     worker_tx: ArcWorkerTx,
     worker_rx: ArcWorkerRx,
+    aborted: Arc<RwLock<bool>>
 }
 
 impl Downloader {
@@ -74,6 +75,7 @@ impl Downloader {
             file_lock: Arc::new(Mutex::new(false)),
             worker_tx: Arc::new(RwLock::new(worker_tx)),
             worker_rx: Arc::new(RwLock::new(worker_rx)),
+            aborted: Arc::new(RwLock::new(false))
         };
     }
 
@@ -174,7 +176,7 @@ impl Downloader {
         let mut prog = self.progress.write().await;
         trace!("Starting worker with id {}", chunk);
         let worker = worker.unwrap();
-        let res = worker.start(chunk);
+        let res = worker.start(chunk).await;
         drop(state);
 
         prog.insert(chunk, 0.0);
@@ -192,12 +194,14 @@ impl Downloader {
 
         let e = tokio::spawn(async move {
             let pb = ProgressBar::new(max_size);
-            pb.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")
+            pb.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec})")
             .unwrap()
             .with_key("eta", |state: &ProgressState, w: &mut dyn Write| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap())
             .progress_chars("#>-"));
+            pb.enable_steady_tick(Duration::from_millis(250));
 
             let mut worker_rx = worker_rx_arc.write().await;
+            let mut downloader_done = false;
             while let Some(el) = worker_rx.next().await {
                 let WorkerProgress { chunk, progress } = el;
 
@@ -205,7 +209,6 @@ impl Downloader {
 
                 let old_prog = state.get(&chunk).unwrap_or(&(0 as f32)).to_owned();
                 state.insert(chunk, progress);
-                let mut downloader_done = false;
                 if progress >= 1.0 && old_prog < 1.0 as f32 {
                     trace!("Downloader worker {} finished.", chunk);
                     let e = Downloader::on_worker_done(&state, &file_arc, &pb).await;
@@ -224,6 +227,11 @@ impl Downloader {
                     Downloader::print_update(&pb, &state, max_size);
                 }
                 drop(state);
+            }
+
+            if !downloader_done {
+                pb.println(format!("Listening for updates stopped and worker is not done. Proably aborted."));
+                pb.finish();
             }
             drop(worker_rx);
         });
@@ -290,6 +298,7 @@ impl Downloader {
             return Ok(false);
         }
 
+        pb.disable_steady_tick();
         pb.finish_and_clear();
         println!(
             "{}",
@@ -327,5 +336,15 @@ impl Downloader {
 
         drop(s);
         return Ok(true);
+    }
+
+    pub async fn abort(&self) {
+        self.worker_rx.write().await.close();
+        let mut s = self.aborted.write().await;
+        *s = true;
+
+        drop(s);
+        let name = self.info.filename.clone();
+        println!("{}", format!("Download of file '{}' has been stopped as a error either on sender or receiver side ocurred.", name.yellow()).red());
     }
 }

@@ -30,7 +30,8 @@ pub struct UploadWorker {
     running: bool,
     tx: ArcProgressTX,
     receiver_key: Rsa<Public>,
-    pub curr_chunk: Arc<RwLock<Option<u64>>>
+    pub curr_chunk: Arc<RwLock<Option<u64>>>,
+    aborted: Arc<RwLock<bool>>
 }
 
 impl UploadWorker {
@@ -72,11 +73,16 @@ impl UploadWorker {
             tx: progress_channel,
             running: false,
             receiver_key,
-            curr_chunk: Arc::new(RwLock::new(None))
+            curr_chunk: Arc::new(RwLock::new(None)),
+            aborted: Arc::new(RwLock::new(false))
         });
     }
 
     async fn spawn_thread(&self, chunk_index: u64) -> anyhow::Result<JoinHandle<anyhow::Result<()>>> {
+        if *self.aborted.read().await {
+            return Err(anyhow!("Cannot start worker as it has been aborted."))
+        }
+
         trace!(
             "Spawning new worker with i: {} uuid: {}",
             chunk_index,

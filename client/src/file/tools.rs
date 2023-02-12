@@ -1,13 +1,10 @@
-use std::fmt::Write;
+use std::{fmt::Write, time::Duration};
 
 use anyhow::anyhow;
-use bytes::Buf;
-use futures::StreamExt;
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use openssl::hash::Hasher;
-use packets::{consts::MSG_DIGEST, file::types::FileInfo};
-use tokio::fs::File;
-use tokio_util::codec::{BytesCodec, FramedRead};
+use packets::{consts::{MSG_DIGEST, ONE_MB_SIZE}, file::types::FileInfo};
+use tokio::{fs::File, io::AsyncReadExt};
 use uuid::Uuid;
 
 use crate::util::consts::PENDING_FILES;
@@ -23,27 +20,29 @@ pub async fn get_pending_file(uuid: Uuid) -> anyhow::Result<FileInfo> {
 }
 
 pub async fn get_hash_progress(file_path: String) -> anyhow::Result<Vec<u8>> {
-    let file = File::open(file_path).await?;
+    let mut file = File::open(file_path).await?;
     let size = file.metadata().await?.len();
 
-    let mut reader = FramedRead::new(file, BytesCodec::new());
     let mut hasher = Hasher::new(*MSG_DIGEST)?;
 
-
     let pb = ProgressBar::new(size);
-    pb.set_style(ProgressStyle::with_template("{spinner:.yellow} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")
+    pb.set_style(ProgressStyle::with_template("{spinner:.yellow} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec})")
     .unwrap()
     .with_key("eta", |state: &ProgressState, w: &mut dyn Write| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap())
     .progress_chars("#>-"));
+    pb.enable_steady_tick(Duration::from_millis(250));
 
-    while let Some(chunk) = reader.next().await {
-        let chunk = chunk?;
-        let chunk = chunk.chunk();
+    let mut chunk;
+    loop {
+        chunk = Vec::with_capacity(ONE_MB_SIZE as usize);
+        let e = file.read_buf(&mut chunk).await?;
 
-        pb.inc(chunk.len().try_into()?);
-        hasher.update(chunk)?;
+        pb.inc(e.try_into().unwrap());
+        hasher.update(&chunk)?;
+        if e == 0 { break; }
     }
 
+    pb.disable_steady_tick();
     pb.finish();
     return Ok(hasher.finish()?.to_vec());
 }

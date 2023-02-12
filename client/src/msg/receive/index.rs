@@ -10,6 +10,7 @@ use tokio_tungstenite::tungstenite::Message;
 use crate::util::types::*;
 
 use super::packets::error::on_error;
+use super::packets::file::chunk::abort::on_chunk_abort;
 use super::packets::file::chunk::downloaded::on_chunk_downloaded;
 use super::packets::file::chunk::ready::on_chunk_ready;
 use super::packets::file::question::index::on_file_question;
@@ -93,6 +94,11 @@ pub async fn handle(msg: Message) -> anyhow::Result<()> {
     if Modes::SendFileChunkDownloaded.is_indicator(&mode) {
         on_chunk_downloaded(&mut data).await?;
         return Ok(());
+    }
+
+    if Modes::SendFileAbort.is_indicator(&mode) {
+        on_chunk_abort(&mut data).await?;
+        return Ok(())
     }
 
     return Err(anyhow!("Invalid packet received."));

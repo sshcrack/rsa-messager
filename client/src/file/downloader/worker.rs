@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::anyhow;
+use colored::Colorize;
 use indicatif::HumanBytes;
 use log::{debug, trace, warn};
 use openssl::{pkey::Public, rsa::Rsa};
@@ -30,7 +31,7 @@ use uuid::Uuid;
 use crate::{
     util::{
         arcs::{get_base_url, get_curr_keypair},
-        msg::send_msg
+        msg::send_msg, consts::MAX_RETRIES
     },
     web::{prefix::get_web_protocol, progress::download_file}, file::tools::WorkerProgress,
 };
@@ -48,6 +49,7 @@ pub struct DownloadWorker {
     tx: ArcProgressTX,
     sender_key: Rsa<Public>,
     file_lock: Arc<Mutex<bool>>,
+    aborted: Arc<RwLock<bool>>
 }
 
 impl DownloadWorker {
@@ -102,10 +104,15 @@ impl DownloadWorker {
             running: false,
             sender_key,
             file_lock,
+            aborted: Arc::new(RwLock::new(false))
         });
     }
 
-    fn spawn_thread(&self, chunk_index: u64) -> anyhow::Result<JoinHandle<anyhow::Result<()>>> {
+    async fn spawn_thread(&self, chunk_index: u64) -> anyhow::Result<JoinHandle<anyhow::Result<()>>> {
+        if *self.aborted.read().await {
+            return Err(anyhow!("Cannot start worker as it has been aborted."))
+        }
+
         trace!(
             "Spawning new worker with i: {} uuid: {}",
             chunk_index,
@@ -198,7 +205,17 @@ impl DownloadWorker {
                 Ok(())
             };
 
-            let res = to_run().await;
+            let mut retry_count = 0 as u64;
+            let mut res;
+            loop {
+                res = to_run().await;
+                if res.is_ok() || retry_count >= MAX_RETRIES {
+                    break;
+                }
+
+                retry_count += 1;
+                eprintln!("{}", format!("An error occurred while running a worker. Retrying ({} / {}).", retry_count, MAX_RETRIES).on_yellow());
+            }
             drop(tx);
 
             if res.is_err() {
@@ -212,7 +229,7 @@ impl DownloadWorker {
         return Ok(handle);
     }
 
-    pub fn start(&mut self, chunk_index: u64) -> anyhow::Result<()> {
+    pub async fn start(&mut self, chunk_index: u64) -> anyhow::Result<()> {
         if self.thread.is_some() {
             trace!(
                 "Could not start thread on index {}. Already running.",
@@ -225,7 +242,7 @@ impl DownloadWorker {
         }
 
         self.running = true;
-        let thread = self.spawn_thread(chunk_index)?;
+        let thread = self.spawn_thread(chunk_index).await?;
         self.thread = Some(thread);
 
         Ok(())

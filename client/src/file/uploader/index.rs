@@ -1,6 +1,7 @@
-use std::{collections::HashMap, fmt::Write, sync::Arc};
+use std::{collections::HashMap, fmt::Write, sync::Arc, time::Duration};
 
 use anyhow::anyhow;
+use colored::Colorize;
 use futures_util::future::select_all;
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use log::{trace, warn};
@@ -43,6 +44,7 @@ pub struct Uploader {
 
     worker_tx: Arc<RwLock<UnboundedSender<WorkerProgress>>>,
     worker_rx: Arc<RwLock<UnboundedReceiverStream<WorkerProgress>>>,
+    aborted: Arc<RwLock<bool>>
 }
 
 impl Uploader {
@@ -60,6 +62,7 @@ impl Uploader {
             update_thread: Arc::new(Mutex::new(None)),
             worker_rx: Arc::new(RwLock::new(worker_rx)),
             worker_tx: Arc::new(RwLock::new(worker_tx)),
+            aborted: Arc::new(RwLock::new(false))
         };
     }
 
@@ -152,12 +155,14 @@ impl Uploader {
 
         let e = tokio::spawn(async move {
             let pb = ProgressBar::new(max_size);
-            pb.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")
+            pb.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec})")
             .unwrap()
             .with_key("eta", |state: &ProgressState, w: &mut dyn Write| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap())
             .progress_chars("#>-"));
+            pb.enable_steady_tick(Duration::from_millis(250));
 
             let mut worker_rx = worker_rx_arc.write().await;
+            let mut uploader_done = false;
             while let Some(el) = worker_rx.next().await {
                 let WorkerProgress { chunk, progress } = el;
                 let progress = progress.min(1 as f32);
@@ -168,10 +173,18 @@ impl Uploader {
 
                 if progress >= 1.0 && old_prog < 1.0 {
                     trace!("Upload worker {} finished.", chunk);
+                    pb.disable_steady_tick();
+                    pb.finish();
+                    uploader_done = true;
                 }
 
                 Uploader::print_update(&pb, &state, max_size);
                 drop(state);
+            }
+
+            if !uploader_done {
+                pb.println(format!("Listening for updates stopped and worker is not done. Proably aborted."));
+                pb.finish();
             }
             drop(worker_rx);
         });
@@ -292,5 +305,15 @@ impl Uploader {
 
         drop(state);
         return processing;
+    }
+
+    pub async fn abort(&self) {
+        self.worker_rx.write().await.close();
+        let mut s = self.aborted.write().await;
+        *s = true;
+
+        let name = self.info.filename.clone();
+        println!("{}", format!("Download of file '{}' has been stopped as a error either on sender or receiver side ocurred.", name.yellow()).red());
+        drop(s);
     }
 }

@@ -6,6 +6,7 @@ use lazy_static::lazy_static;
 
 use super::types::*;
 
+pub const MAX_RETRIES: u64 = 5;
 lazy_static! {
     pub static ref CONCURRENT_THREADS: ConcurrentThreads = Arc::new(RwLock::new(64));
     pub static ref BASE_URL: BaseUrl = Arc::new(RwLock::new("".to_string()));
@@ -14,6 +15,7 @@ lazy_static! {
     pub static ref SEND_DISABLED: SendDisabled = Arc::new(AtomicBool::new(true));
     pub static ref RECEIVER: ReceiverArc = ReceiverArc::new(RwLock::new(None));
     pub static ref KEYPAIR: Keypair = Arc::new(RwLock::new(None));
+
 
     pub static ref TX_CHANNEL: TXChannelArc = Arc::new(Mutex::new(None));
 

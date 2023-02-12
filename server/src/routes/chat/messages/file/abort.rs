@@ -5,8 +5,9 @@ use log::trace;
 use packets::{file::processing::abort::ChunkAbortMsg, types::ByteMessage};
 use tokio::fs::{read_dir, remove_file};
 use uuid::Uuid;
+use warp::ws::Message;
 
-use crate::file::{tools::{get_uploading_file, get_pending_file}, consts::{CHUNK_DIR, PENDING_UPLOADS, UPLOADING_FILES}};
+use crate::{file::{tools::{get_uploading_file, get_pending_file}, consts::{CHUNK_DIR, PENDING_UPLOADS, UPLOADING_FILES}}, utils::tools::send_msg_specific};
 
 pub async fn on_chunk_abort(data: &Vec<u8>, my_id: &Uuid) -> anyhow::Result<()> {
     let msg = ChunkAbortMsg::deserialize(data)?;
@@ -20,6 +21,10 @@ pub async fn on_chunk_abort(data: &Vec<u8>, my_id: &Uuid) -> anyhow::Result<()> 
 
     let chunk_dir = CHUNK_DIR.as_path();
     let mut files = read_dir(chunk_dir).await?;
+
+    let b_msg = msg.serialize();
+    send_msg_specific(file.receiver, Message::binary(b_msg.clone())).await?;
+    send_msg_specific(file.sender, Message::binary(b_msg.clone())).await?;
 
     while let Ok(file) = files.next_entry().await {
         if file.is_none() {
