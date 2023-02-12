@@ -22,7 +22,6 @@ impl ByteMessage for ChunkReadyMsg {
 
     fn deserialize(data: &Vec<u8>) -> anyhow::Result<Self> where Self: Sized {
         trace!("Parsing ready msg...");
-        trace!("Deserialize msg {}", hex::encode(data));
         let mut data = data.clone();
 
         let uuid = uuid_from_vec(&mut data)?;
