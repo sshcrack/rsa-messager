@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use crate::util::consts::{BASE_URL, CURR_ID};
+use crate::{util::consts::{BASE_URL, CURR_ID}, web::prefix::get_web_protocol};
 use anyhow::anyhow;
 use colored::Colorize;
 use inquire::Select;
@@ -15,7 +15,8 @@ pub async fn select_receiver() -> anyhow::Result<Uuid> {
         let base = state.to_string();
         drop(state);
 
-        let list_url = format!("http://{}/list", base);
+        let protocol = get_web_protocol().await;
+        let list_url = format!("{}//{}/list", protocol, base);
 
         println!("{}", format!("Fetching available clients {}...", list_url.purple()).bright_black());
         let resp = surf::get(list_url.to_string()).send().await;
@@ -32,6 +33,7 @@ pub async fn select_receiver() -> anyhow::Result<Uuid> {
         }
 
         let text = text.unwrap();
+        println!("Body Str is {}", text);
         let mut available: Vec<String> = text.split(",").map(|e| e.to_owned()).collect();
         let mut found_index = NOT_FOUND_ID;
 
