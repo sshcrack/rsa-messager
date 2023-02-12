@@ -1,9 +1,10 @@
 use anyhow::anyhow;
 use log::trace;
+use packets::other::info::UserInfoBasic;
 use uuid::Uuid;
 
 use crate::{
-    util::{arcs::get_base_url, types::UserInfoBasic},
+    util::{arcs::get_base_url},
     web::prefix::get_web_protocol,
 };
 
@@ -25,16 +26,16 @@ pub async fn get_user_info(uuid: &Uuid) -> anyhow::Result<UserInfoBasic> {
 
         let mut resp = resp.unwrap();
         trace!("Resp parse text");
-        let text = resp.body_string().await;
-        if text.is_err() {
-            return Err(text.unwrap_err().into_inner());
+        let bytes = resp.body_bytes().await;
+        if bytes.is_err() {
+            return Err(bytes.unwrap_err().into_inner());
         }
 
-        let text = text.unwrap();
-        let json: UserInfoBasic = serde_json::from_str(&text)?;
+        let bytes = bytes.unwrap();
+        let info: UserInfoBasic = UserInfoBasic::deserialize(&bytes)?;
 
         trace!("Done.");
-        return Ok(json);
+        return Ok(info);
     });
 
     return e.await?;

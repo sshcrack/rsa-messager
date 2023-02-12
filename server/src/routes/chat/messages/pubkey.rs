@@ -1,4 +1,3 @@
-use log::debug;
 use packets::{initialize::pubkey::PubkeyMsg, types::ByteMessage};
 use uuid::Uuid;
 
@@ -16,6 +15,5 @@ pub async fn on_pubkey(data: &Vec<u8>, my_id: &Uuid) -> anyhow::Result<()> {
     }
 
     drop(state);
-    debug!("Pubkey set. len: {}", pubkey.len());
     Ok(())
 }

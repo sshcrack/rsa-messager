@@ -2,7 +2,6 @@ use std::{collections::HashMap, str::FromStr};
 
 use anyhow::anyhow;
 use log::trace;
-use openssl::rsa::Rsa;
 use packets::encryption::sign::validate_signature;
 use tokio::fs::File;
 use tokio_util::io::ReaderStream;
@@ -48,8 +47,6 @@ pub async fn on_download(
         }
 
         let pub_key = pub_key.unwrap();
-        let pub_key = Rsa::public_key_from_pem(&pub_key.as_bytes())?;
-
         let is_valid = validate_signature(&uuid.as_bytes().to_vec(), &signature, &pub_key)?;
         if !is_valid {
             trace!("Not a valid signature");

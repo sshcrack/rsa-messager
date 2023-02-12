@@ -5,6 +5,8 @@ use anyhow::anyhow;
 use inquire::Select;
 use uuid::Uuid;
 
+const NOT_FOUND_ID: usize = 9999;
+
 pub async fn select_receiver() -> anyhow::Result<Uuid> {
     let res = tokio::spawn(async move {
         let state = BASE_URL.read().await;
@@ -29,8 +31,8 @@ pub async fn select_receiver() -> anyhow::Result<Uuid> {
         }
 
         let text = text.unwrap();
-        let mut available: Vec<String> = serde_json::from_str(&text)?;
-        let mut found_index = 9999;
+        let mut available: Vec<String> = text.split(",").map(|e| e.to_owned()).collect();
+        let mut found_index = NOT_FOUND_ID;
 
         let state = CURR_ID.read().await;
         if state.is_some() {
@@ -49,12 +51,12 @@ pub async fn select_receiver() -> anyhow::Result<Uuid> {
 
         drop(state);
 
-        if found_index != 9999 {
+        if found_index != NOT_FOUND_ID {
             available[found_index] = format!("{} (you)", available[found_index]);
         }
 
         let mut select_prompt = Select::new("Receiver:", available);
-        if found_index != 9999 {
+        if found_index != NOT_FOUND_ID {
             select_prompt.starting_cursor = found_index;
         }
 

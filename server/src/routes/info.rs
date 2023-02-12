@@ -1,10 +1,12 @@
 use std::{collections::HashMap, str::FromStr};
 
 use uuid::Uuid;
-use warp::hyper::Response;
+use warp::{
+    hyper::{Response, StatusCode},
+    reply,
+};
 
-use crate::{utils::types::UserInfoBasic, file::consts::USERS};
-
+use crate::file::consts::USERS;
 
 pub async fn on_info(p: HashMap<String, String>) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     let k = p.get("id");
@@ -35,14 +37,14 @@ pub async fn on_info(p: HashMap<String, String>) -> Result<Box<dyn warp::Reply>,
     }
 
     let info = info.unwrap();
-    let name = &info.name;
-    let pubkey = &info.public_key;
-
-    let basic = UserInfoBasic {
-        name: name.to_owned(),
-        public_key: pubkey.to_owned(),
-    };
-
+    let basic = info.to_basic().serialize();
     drop(state);
-    return Ok(Box::new(warp::reply::json(&basic)));
+    if basic.is_err() {
+        return Ok(Box::new(
+            Response::builder().body(String::from("Could not get user info"))
+        ))
+    }
+
+    let basic = basic.unwrap();
+    return Ok(Box::new(reply::with_status(basic, StatusCode::OK)));
 }

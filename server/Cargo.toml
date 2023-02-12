@@ -21,8 +21,6 @@ tokio = { version = "1.24.2", features = ["full"] }
 tokio-stream = "0.1.11"
 futures-util = { version = "0.3.25", default-features = false, features = ["sink"] }
 uuid ={ version = "1.2.2", features = [ "v4", "fast-rng", "macro-diagnostics" ]}
-serde_json = "1.0.91"
-serde = { version = "1.0.152", features = ["serde_derive"] }
 clap = { version = "4.1.1", features = ["derive"] }
 warp = "0.3.3"
 colorize = "0.1.0"
@@ -30,7 +28,8 @@ anyhow = { version = "1.0.68", features = ["backtrace"] }
 lazy_static = "1.4.0"
 log = "0.4.17"
 readonly = "0.2.3"
-packets = { path = "../packets" }
+packets = { path = "../packets", package = "rsa-msg-packets" }
+#packets = { package = "rsa-msg-packets", version = "0.1.0" }
 openssl = "0.10.45"
 hex = "0.4.3"
 tokio-util = "0.7.4"

@@ -122,7 +122,12 @@ impl Uploader {
         let max_chunks = get_max_chunks(max_size);
         let mut percentages: Vec<f32> = progress.values().map(|e| e.clone()).collect();
 
-        let left = max_chunks - progress.len() as u64;
+        let prog_len: u64 = progress.len().try_into().unwrap();
+        let mut left = 0 as u64;
+        if max_chunks >= prog_len {
+            left = max_chunks - prog_len
+        }
+
         for _ in 0..left {
             percentages.push(0 as f32);
         }

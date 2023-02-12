@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use futures_util::{Stream, StreamExt};
 use log::trace;
-use openssl::{pkey::PKey, rsa::Rsa, sign::Verifier};
+use openssl::{pkey::PKey, sign::Verifier};
 use packets::{
     consts::{MSG_DIGEST, U64_SIZE, USIZE_SIZE, UUID_SIZE},
     file::processing::ready::ChunkReadyMsg,
@@ -60,7 +60,6 @@ where
         }
 
         let pub_key = pub_key.unwrap();
-        let pub_key = Rsa::public_key_from_pem(pub_key.as_bytes())?;
         let p_key = PKey::from_rsa(pub_key.clone())?;
 
         let file_path = get_chunk_file(&uuid, chunk_index).await?;

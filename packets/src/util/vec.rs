@@ -22,7 +22,7 @@ pub fn decque_to_vec<T>(v: VecDeque<T>) -> Vec<T> {
 }
 
 pub fn extract_vec(range: Range<usize>, v: &mut Vec<u8>) -> anyhow::Result<Vec<u8>> {
-    if range.start >= v.len() || range.end >= v.len() {
+    if range.start > v.len() || range.end > v.len() {
         return Err(anyhow!(format!("Could not extract vec with range {:?} as vec is {} long", range, v.len())));
     }
 

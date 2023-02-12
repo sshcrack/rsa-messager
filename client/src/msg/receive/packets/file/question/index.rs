@@ -4,7 +4,6 @@ use anyhow::anyhow;
 use colored::Colorize;
 use indicatif::HumanBytes;
 use log::trace;
-use openssl::rsa::Rsa;
 use packets::{
     file::{
         question::{ index::FileQuestionMsg, reply::FileQuestionReplyMsg },
@@ -158,7 +157,6 @@ pub async fn check_accepted(msg: FileQuestionMsg) -> anyhow::Result<bool> {
     }
 
     let key = key.unwrap();
-    let key = Rsa::public_key_from_pem(key.as_bytes())?;
 
     trace!("Initializing downloader...");
     let mut downloader = Downloader::new(&uuid, key, &info);

@@ -19,13 +19,12 @@ use crate::util::msg::{print_from_msg, send_msg};
 pub async fn send_msgs() -> anyhow::Result<()> {
     let keypair = get_curr_keypair().await?;
 
-    let pem_vec = String::from_utf8(keypair.public_key_to_pem()?)?;
-    let initial_msg = PubkeyMsg { pubkey: pem_vec }.serialize();
+    let initial_msg = PubkeyMsg::from_private(keypair)?.serialize();
 
     send_msg(Message::binary(initial_msg)).await?;
     send_msg(Message::binary(Modes::WantUid.get_send(&Vec::new()))).await?;
 
-    println!("Use /rec to change receiver\nUse /name <your name>");
+    println!("Use /rec to change receiver\nUse /name <your name>\nUse /send <file> to send files.");
 
     let stdin = stdin();
 
@@ -46,7 +45,7 @@ pub async fn send_msgs() -> anyhow::Result<()> {
                 "{}",
                 format!("{:?}", err).on_bright_red().black()
             );
-        } 
+        }
     }
 }
 

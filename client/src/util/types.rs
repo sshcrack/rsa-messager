@@ -5,7 +5,6 @@ use clap::{arg, command, Parser};
 use futures_util::{stream::{SplitSink, SplitStream}, lock::Mutex};
 use openssl::{pkey::Private, rsa::Rsa};
 use packets::file::types::FileInfo;
-use serde::{Deserialize, Serialize};
 use tokio::{net::TcpStream, sync::RwLock};
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, tungstenite::Message};
 use uuid::Uuid;
@@ -33,12 +32,6 @@ pub type ReceiveTX = Sender<String>;
 pub type FileUploads = Arc<RwLock<HashMap<Uuid, Uploader>>>;
 pub type FileDownloads = Arc<RwLock<HashMap<Uuid, Downloader>>>;
 pub type PendingFiles = Arc<RwLock<HashMap<Uuid, FileInfo>>>;
-
-#[derive(Serialize, Deserialize)]
-pub struct UserInfoBasic {
-    pub name: Option<String>,
-    pub public_key: Option<String>,
-}
 
 /// An client designed to communicate via rsa to other clients
 #[derive(Parser, Debug)]

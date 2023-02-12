@@ -23,6 +23,11 @@ impl ByteMessage for NameMsg {
             return Err(anyhow!("Name packet is too short / too long."));
         }
 
+        if name.to_lowercase() == "you" {
+            trace!("Name cannot be you ({})", name);
+            return Err(anyhow!("Name cannot be you"));
+        }
+
         return Ok(NameMsg {
             name
         });

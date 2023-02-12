@@ -1,8 +1,8 @@
 use anyhow::anyhow;
+use packets::other::info::UserInfoBasic;
 use uuid::Uuid;
 
 use crate::file::consts::USERS;
-use super::types::UserInfoBasic;
 
 pub async fn get_user(uuid: &Uuid) -> anyhow::Result<UserInfoBasic> {
     let state = USERS.read().await;

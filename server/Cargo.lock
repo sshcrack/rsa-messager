@@ -709,19 +709,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b7820b9daea5457c9f21c69448905d723fbd21136ccf521748f23fd49e723ee"
 
 [[package]]
-name = "packets"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "hex",
- "lazy_static",
- "log",
- "openssl",
- "tokio",
- "uuid",
-]
-
-[[package]]
 name = "parking_lot"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -929,7 +916,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rsa-messager-server"
+name = "rsa-messenger-server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -940,16 +927,26 @@ dependencies = [
  "lazy_static",
  "log",
  "openssl",
- "packets",
  "pretty_env_logger",
  "readonly",
- "serde",
- "serde_json",
+ "rsa-msg-packets",
  "tokio",
  "tokio-stream",
  "tokio-util",
  "uuid",
  "warp",
+]
+
+[[package]]
+name = "rsa-msg-packets"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "lazy_static",
+ "log",
+ "openssl",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -1010,20 +1007,6 @@ name = "serde"
 version = "1.0.152"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bb7d1f0d3021d347a83e556fc4683dea2ea09d87bccdf88ff5c12545d89d5efb"
-dependencies = [
- "serde_derive",
-]
-
-[[package]]
-name = "serde_derive"
-version = "1.0.152"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af487d118eecd09402d70a5d72551860e788df87b464af30e5ea6a38c75c541e"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
 
 [[package]]
 name = "serde_json"

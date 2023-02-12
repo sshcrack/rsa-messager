@@ -1,22 +1,16 @@
 use std::{sync::Arc, collections::HashMap};
 
 use clap::Parser;
-use serde::{Serialize, Deserialize};
+use openssl::{pkey::Public, rsa::Rsa};
+use packets::other::info::UserInfoBasic;
 use tokio::sync::{mpsc::{self, UnboundedSender}, RwLock};
 use uuid::Uuid;
 use warp::ws::Message;
 
-
-#[derive(Serialize, Deserialize)]
-pub struct UserInfoBasic {
-    pub name: Option<String>,
-    pub public_key: Option<String>,
-}
-
 pub struct UserInfo {
     pub sender: mpsc::UnboundedSender<Message>,
     pub name: Option<String>,
-    pub public_key: Option<String>,
+    pub public_key: Option<Rsa<Public>>,
 }
 
 impl UserInfo {

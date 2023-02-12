@@ -11,6 +11,9 @@ pub const ONE_MB_SIZE: u64 = 1000 * 1000 ; // 1 MB
 pub const AES_KEYSIZE_BITS: usize = 256;
 pub const AES_KEYSIZE_BYTES: usize = AES_KEYSIZE_BITS / USIZE_SIZE;
 
+pub const RSA_KEY_BITS: u32 = 2048;
+pub const RSA_PUBKEY_BYTES: usize = 451;
+
 pub const AES_IVSIZE_BITS: usize = 128;
 pub const AES_IVSIZE_BYTES: usize = AES_IVSIZE_BITS / USIZE_SIZE;
 

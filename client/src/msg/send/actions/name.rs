@@ -13,6 +13,11 @@ pub async fn on_name(line: &str) -> anyhow::Result<()> {
         return Ok(())
     }
 
+    if new_name.to_lowercase() == "you" {
+        println!("{}", "You can't name yourself you.".red());
+        return Ok(())
+    }
+
     let to_send = NameMsg {
         name: new_name.clone()
     }.serialize();
