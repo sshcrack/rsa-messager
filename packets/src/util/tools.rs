@@ -58,7 +58,7 @@ pub fn usize_to_vec(size: usize) -> anyhow::Result<Vec<u8>> {
     return Ok(raw.to_le_bytes().to_vec());
 }
 
-pub fn usize_from_vec(v: &mut Vec<u8>) -> anyhow::Result<usize> {
+pub fn vec_to_usize(v: &mut Vec<u8>) -> anyhow::Result<usize> {
     let raw_numb = u64_from_vec(v)?;
     let numb = usize::try_from(raw_numb);
 

@@ -6,8 +6,8 @@ use uuid::Uuid;
 
 use crate::encryption::sign::validate_signature;
 use crate::other::key_iv::KeyIVPair;
-use crate::util::tools::u64_from_vec;
-use crate::util::{tools::{usize_from_vec, uuid_from_vec}, vec::extract_vec};
+use crate::util::tools::{u64_from_vec, usize_to_vec};
+use crate::util::{tools::{vec_to_usize, uuid_from_vec}, vec::extract_vec};
 
 
 #[derive(Debug, Clone)]
@@ -26,7 +26,7 @@ impl ChunkMsg {
         let mut b_encrypted = self.encrypted.clone();
         let mut b_key = self.key.serialize(receiver_key)?;
 
-        let signature_size = self.signature.len().to_le_bytes().to_vec();
+        let signature_size = usize_to_vec(self.signature.len())?;
         let mut b_uuid = self.uuid.clone().as_bytes().to_vec();
 
         let mut b_chunk_index = self.chunk_index.clone().to_le_bytes().to_vec();
@@ -44,7 +44,7 @@ impl ChunkMsg {
     pub fn deserialize(data: &Vec<u8>, sender_pubkey: &Rsa<Public>, receiver_key: &Rsa<Private>) -> anyhow::Result<Self> {
         let mut data = data.clone();
 
-        let signature_size = usize_from_vec(&mut data)?;
+        let signature_size = vec_to_usize(&mut data)?;
         let signature = extract_vec(0..signature_size, &mut data)?;
 
         let uuid = uuid_from_vec(&mut data)?;

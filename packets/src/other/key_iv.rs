@@ -2,7 +2,7 @@ use openssl::{rand, symm::{encrypt, decrypt}, pkey::{Private, Public}, rsa::Rsa}
 
 use crate::{
     consts::{AES_DIGEST, AES_IVSIZE_BYTES, AES_KEYSIZE_BYTES, AES_KEYSIZE_BITS, AES_IVSIZE_BITS},
-    util::{vec::extract_vec, rsa::{encrypt_rsa, decrypt_rsa}, tools::usize_from_vec},
+    util::{vec::extract_vec, rsa::{encrypt_rsa, decrypt_rsa}, tools::{vec_to_usize, usize_to_vec}},
 };
 
 #[derive(Debug, Clone)]
@@ -18,10 +18,10 @@ impl KeyIVPair {
     pub fn serialize(&self, keypair: &Rsa<Public>) -> anyhow::Result<Vec<u8>> {
         let mut merged = Vec::new();
         let mut b_key = encrypt_rsa(keypair, &self.key.clone())?;
-        let mut b_key_size = b_key.len().to_le_bytes().to_vec();
+        let mut b_key_size = usize_to_vec(b_key.len())?;
 
         let mut b_iv = encrypt_rsa(keypair, &self.iv.clone())?;
-        let mut b_iv_size = b_iv.len().to_le_bytes().to_vec();
+        let mut b_iv_size = usize_to_vec(b_iv.len())?;
 
         merged.append(&mut b_key_size);
         merged.append(&mut b_key);
@@ -33,10 +33,10 @@ impl KeyIVPair {
 
     pub fn deserialize_mut(data: &mut Vec<u8>, keypair: &Rsa<Private>) -> anyhow::Result<Self>
     where Self: Sized {
-        let key_size = usize_from_vec(data)?;
+        let key_size = vec_to_usize(data)?;
         let key = extract_vec(0..key_size, data)?;
 
-        let iv_size = usize_from_vec(data)?;
+        let iv_size = vec_to_usize(data)?;
         let iv = extract_vec(0..iv_size, data)?;
 
         let key = decrypt_rsa(keypair, &key)?;

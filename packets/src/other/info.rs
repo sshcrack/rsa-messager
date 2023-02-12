@@ -1,6 +1,6 @@
 use openssl::{pkey::Public, rsa::Rsa};
 
-use crate::{util::{tools::usize_from_vec, vec::extract_vec}};
+use crate::{util::{tools::{vec_to_usize, usize_to_vec}, vec::extract_vec}};
 
 
 #[derive(Debug, Clone)]
@@ -15,7 +15,7 @@ impl UserInfoBasic {
         let name = self.name.clone().unwrap_or("".to_owned());
         let name_len = name.len();
 
-        let mut b_name_len = name_len.to_le_bytes().to_vec();
+        let mut b_name_len = usize_to_vec(name_len)?;
         let mut b_name = name.as_bytes().to_vec();
 
         let mut pubkey = Vec::new();
@@ -24,7 +24,7 @@ impl UserInfoBasic {
             pubkey = key.public_key_to_pem()?
         }
 
-        let mut pubkey_len = pubkey.len().to_le_bytes().to_vec();
+        let mut pubkey_len = usize_to_vec(pubkey.len())?;
 
         merged.append(&mut b_name_len);
         merged.append(&mut b_name);
@@ -36,7 +36,7 @@ impl UserInfoBasic {
 
     pub fn deserialize(data: &Vec<u8>) -> anyhow::Result<Self> where Self: Sized {
         let mut data = data.clone();
-        let name_len = usize_from_vec(&mut data)?;
+        let name_len = vec_to_usize(&mut data)?;
 
         let b_name = extract_vec(0..name_len, &mut data)?;
         let name = String::from_utf8(b_name)?;
@@ -46,7 +46,7 @@ impl UserInfoBasic {
             name_out = Some(name);
         }
 
-        let pubkey_len = usize_from_vec(&mut data)?;
+        let pubkey_len = vec_to_usize(&mut data)?;
         let pubkey_pem = extract_vec(0..pubkey_len, &mut data)?;
 
         let mut public_key= None;
