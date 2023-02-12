@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use uuid::Uuid;
 
-use crate::consts::{U64_SIZE, USIZE_SIZE, UUID_SIZE};
+use crate::consts::{U64_SIZE, UUID_SIZE};
 
 pub fn bytes_to_uuid(v: &Vec<u8>) -> anyhow::Result<Uuid> {
     if v.len() != UUID_SIZE {
@@ -52,22 +52,20 @@ pub fn u64_from_vec(v: &mut Vec<u8>) -> anyhow::Result<u64> {
     Ok(numb)
 }
 
+pub fn usize_to_vec(size: usize) -> anyhow::Result<Vec<u8>> {
+    let raw: u64 = u64::try_from(size)?;
+
+    return Ok(raw.to_le_bytes().to_vec());
+}
+
 pub fn usize_from_vec(v: &mut Vec<u8>) -> anyhow::Result<usize> {
-    if v.len() < USIZE_SIZE {
-        return Err(anyhow!(format!(
-            "Cannot parse usize as vector is not long enough ({} items)",
-            v.len()
-        )));
+    let raw_numb = u64_from_vec(v)?;
+    let numb = usize::try_from(raw_numb);
+
+    if numb.is_err() {
+        eprintln!("Err: {}", numb.unwrap_err());
+        return Err(anyhow!("Usize could not be parsed. Number exceeds usize max."));
     }
 
-    let temp = v.splice(0..USIZE_SIZE, vec![]);
-    let temp = Vec::from_iter(temp);
-
-    let mut buff: [u8; USIZE_SIZE] = [0; USIZE_SIZE];
-    for i in 0..USIZE_SIZE {
-        buff[i] = temp.get(i).unwrap().to_owned();
-    }
-
-    let numb = usize::from_le_bytes(buff);
-    Ok(numb)
+    Ok(numb.unwrap())
 }
