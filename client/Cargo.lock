@@ -1612,7 +1612,9 @@ dependencies = [
 
 [[package]]
 name = "rsa-msg-packets"
-version = "0.1.0"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3448e1c705af98ae8998d401dd75eaaa25dfff025cc10321ff091c49bc2a0bfe"
 dependencies = [
  "anyhow",
  "lazy_static",
