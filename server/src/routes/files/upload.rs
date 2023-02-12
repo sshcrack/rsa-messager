@@ -18,7 +18,7 @@ use crate::{
     file::tools::{get_chunk_file, get_uploading_file},
     utils::{
         arcs::get_user,
-        stream::{s2vec, vec_from_stream},
+        stream::s2vec,
         tools::send_msg_specific,
     },
 };

@@ -69,10 +69,8 @@ impl KeyIVPair {
     }
 
     pub fn encrypt(&self, data: &Vec<u8>) -> anyhow::Result<Vec<u8>> {
-        println!("Encrypting dataLen: {} with iv {} and key {}", data.len(), self.iv.len(), self.key.len());
         let encrypted = encrypt(*AES_DIGEST, &self.key, Some(&self.iv), data)?;
 
-        println!("Done encrypting");
         return Ok(encrypted);
     }
 
