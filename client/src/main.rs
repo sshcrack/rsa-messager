@@ -10,6 +10,7 @@ use tokio::task;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 use util::consts::{RECEIVE_RX, RECEIVE_TX};
+use log::trace;
 
 use crate::encryption::rsa::generate;
 use crate::msg::receive::index::receive_msgs;
@@ -30,6 +31,7 @@ mod web;
 async fn main() {
     pretty_env_logger::init();
 
+    trace!("Initializing...");
     let res = task::spawn(async move {
         let e = _async_main().await;
         if e.is_err() {

@@ -129,6 +129,7 @@ impl UploadWorker {
                     return Err(anyhow!(format!("Can not seek to {} as file size is only {}", seek_to, size)));
                 }
 
+                trace!("Seeek {}", seek_to);
                 buf.seek(SeekFrom::Current(seek_to)).await?;
 
                 let is_last_chunk = (i + max_chunks) >= max_chunks;
@@ -143,6 +144,7 @@ impl UploadWorker {
                 let mut chunk = Vec::with_capacity(chunk_size);
 
                 let mut bytes_read = 0;
+                trace!("while loop {}", seek_to);
                 while bytes_read < chunk_size {
                     let to_read = std::cmp::min(ONE_MB_SIZE, chunk_size_u64);
                     let to_read = usize::try_from(to_read)?;

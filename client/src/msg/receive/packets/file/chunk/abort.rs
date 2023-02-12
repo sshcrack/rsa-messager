@@ -12,6 +12,7 @@ pub async fn on_chunk_abort(data: &mut Vec<u8>) -> anyhow::Result<()> {
     let downloader = state.get(&msg.uuid);
 
     if downloader.is_some() {
+        println!("Aborting downloader...");
         downloader.unwrap().abort().await;
         drop(state);
         return Ok(());
@@ -23,6 +24,7 @@ pub async fn on_chunk_abort(data: &mut Vec<u8>) -> anyhow::Result<()> {
     let uploader = state.get(&msg.uuid);
 
     if uploader.is_some() {
+        println!("Aborting uploader...");
         uploader.unwrap().abort().await;
         drop(state);
         return Ok(());

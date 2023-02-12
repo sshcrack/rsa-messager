@@ -3,10 +3,10 @@ use futures_util::{Stream, StreamExt};
 use log::trace;
 use openssl::{pkey::PKey, sign::Verifier};
 use packets::{
-    consts::{MSG_DIGEST, U64_SIZE, USIZE_SIZE, UUID_SIZE},
+    consts::{MSG_DIGEST, U64_SIZE, UUID_SIZE},
     file::processing::ready::ChunkReadyMsg,
     types::ByteMessage,
-    util::tools::{u64_from_vec, vec_to_usize, uuid_from_vec},
+    util::tools::{u64_from_vec, uuid_from_vec, vec_to_usize},
 };
 use tokio::{
     fs::{remove_file, File},
@@ -30,24 +30,32 @@ where
 {
     let res: anyhow::Result<()> = async move {
         let mut previous: Vec<u8> = Vec::new();
-        let b_signature_size = s2vec(&mut body, USIZE_SIZE, &mut previous).await?;
+        println!("Getting sig size...");
+        let b_signature_size = s2vec(&mut body, U64_SIZE, &mut previous).await?;
         let signature_size = vec_to_usize(&mut b_signature_size.clone())?;
 
-        let signature = vec_from_stream(&mut body, signature_size, &mut previous).await?;
+        println!("Getting sig...");
+        let signature = s2vec(&mut body, signature_size, &mut previous).await?;
+        println!("Getting uuid...");
         let b_uuid = s2vec(&mut body, UUID_SIZE, &mut previous).await?;
         let uuid = uuid_from_vec(&mut b_uuid.clone())?;
 
+        println!("Getting chunkind...");
         let b_chunk_index = s2vec(&mut body, U64_SIZE, &mut previous).await?;
         let chunk_index = u64_from_vec(&mut b_chunk_index.clone())?;
 
-        let b_key_size = s2vec(&mut body, USIZE_SIZE, &mut previous).await?;
+        println!("Getting key siz...");
+        let b_key_size = s2vec(&mut body, U64_SIZE, &mut previous).await?;
         let key_size = vec_to_usize(&mut b_key_size.clone())?;
 
+        println!("Getting key...");
         let b_key = s2vec(&mut body, key_size, &mut previous).await?;
 
-        let b_iv_size = s2vec(&mut body, USIZE_SIZE, &mut previous).await?;
+        println!("Getting iv siz...");
+        let b_iv_size = s2vec(&mut body, U64_SIZE, &mut previous).await?;
         let iv_size = vec_to_usize(&mut b_iv_size.clone())?;
 
+        println!("Getting iv...");
         let b_iv = s2vec(&mut body, iv_size, &mut previous).await?;
 
         trace!("Getting file in upload {}", uuid);

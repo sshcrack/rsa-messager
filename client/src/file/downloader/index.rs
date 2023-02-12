@@ -19,7 +19,7 @@ use uuid::Uuid;
 
 use crate::{
     file::tools::{get_hash_progress, WorkerProgress},
-    util::{arcs::get_concurrent_threads, tools::get_avg},
+    util::tools::get_avg,
 };
 
 use super::worker::DownloadWorker;
@@ -94,7 +94,7 @@ impl Downloader {
         let file_lock = self.file_lock.clone();
         let worker_tx = self.worker_tx.clone();
 
-        let to_spawn = get_concurrent_threads().await.min(max_chunks);
+        let to_spawn = get_max_chunks(info.size).min(max_chunks);
         self.threads = Some(to_spawn);
 
         if info.path.is_none() {

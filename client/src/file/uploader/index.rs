@@ -19,7 +19,7 @@ use uuid::Uuid;
 
 use crate::{
     file::tools::WorkerProgress,
-    util::{tools::get_avg, arcs::get_concurrent_threads},
+    util::tools::get_avg,
 };
 
 use super::worker::UploadWorker;
@@ -88,15 +88,15 @@ impl Uploader {
         *state = Some(handle);
 
         drop(state);
-        let to_spawn = get_concurrent_threads().await.min(max_threads);
+        let to_spawn = self.get_max_chunks().min(max_threads);
 
         self.threads = Some(to_spawn);
-        trace!("Spawning {} workers", to_spawn);
+        trace!("Spawning {} workers max: {}", to_spawn, max_threads);
         let mut state = self.workers.write().await;
         let mut state_prog = self.progress.write().await;
 
         for i in 0..to_spawn {
-            trace!("Spawning upload worker with Thread_Indx {}", i);
+            trace!("Spawning upload worker with Thread_Index {}", i);
             let mut worker = UploadWorker::new(
                 i,
                 self.uuid,
