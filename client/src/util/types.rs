@@ -41,13 +41,8 @@ pub struct Args {
     #[arg(long, short = 'r')]
     pub receiver: Option<String>,
 
-    /// The address this client should connect to
-    #[arg(short = 'a', long)]
-    pub address: Option<String>,
-
-    /// Weither the client should use http:// and wss:// (tls)
-    #[arg(short = 's', long)]
-    pub secure: Option<bool>,
+    /// Address and port where the client should connect to (e.g. http://localhost:3000 or https://localhost:3000)
+    pub address: String,
 
     /// Name of the client
     #[arg(short = 'n', long)]

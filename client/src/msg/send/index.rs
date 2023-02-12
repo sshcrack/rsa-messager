@@ -24,7 +24,8 @@ pub async fn send_msgs() -> anyhow::Result<()> {
     send_msg(Message::binary(initial_msg)).await?;
     send_msg(Message::binary(Modes::WantUid.get_send(&Vec::new()))).await?;
 
-    println!("Use /rec to change receiver\nUse /name <your name>\nUse /send <file> to send files.");
+    let prefix = "| ".blue();
+    println!("{}", format!("\n\n{}Use /rec to change receiver\n{}Use /name <your name>\n{}Use /send <file> to send files.\n{}Use /h to get help\n\n", prefix, prefix, prefix, prefix));
 
     let stdin = stdin();
 

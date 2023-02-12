@@ -28,9 +28,13 @@ pub async fn on_send(line: &str) -> anyhow::Result<()> {
     let receiver = get_receiver().await?;
     let receiver_name = uuid_to_name(receiver).await?;
 
-
     let curr_id = get_curr_id().await?;
     let uuid = Uuid::new_v4();
+
+    if curr_id == receiver {
+        eprintln!("{}", format!("You can not send the file to yourself.").on_red());
+        return Ok(())
+    }
 
     let filename = given_path.file_name();
     if filename.is_none() {

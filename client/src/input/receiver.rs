@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use crate::util::consts::{BASE_URL, CURR_ID};
 use anyhow::anyhow;
+use colored::Colorize;
 use inquire::Select;
 use uuid::Uuid;
 
@@ -16,7 +17,7 @@ pub async fn select_receiver() -> anyhow::Result<Uuid> {
 
         let list_url = format!("http://{}/list", base);
 
-        println!("Fetching available clients {}...", list_url);
+        println!("{}", format!("Fetching available clients {}...", list_url.purple()).bright_black());
         let resp = surf::get(list_url.to_string()).send().await;
 
         if resp.is_err() {

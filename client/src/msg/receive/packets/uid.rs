@@ -13,7 +13,7 @@ pub async fn on_uid(
 ) -> anyhow::Result<()> {
     let UidReplyMsg { uuid } = UidReplyMsg::deserialize(data)?;
 
-    println!("Current id set to {}", uuid);
+    println!("{}", format!("Your id is: '{}'", uuid.to_string().cyan()).bright_black());
     let mut state = CURR_ID.write().await;
     *state = Some(uuid);
 

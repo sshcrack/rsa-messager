@@ -2,24 +2,29 @@ use std::process::exit;
 
 use anyhow::anyhow;
 use clap::Parser;
+use colored::Colorize;
 use futures_util::StreamExt;
+use packets::initialize::name::NameMsg;
+use packets::types::ByteMessage;
 use tokio::task;
 use tokio_tungstenite::connect_async;
-use util::consts::{RECEIVE_TX, RECEIVE_RX};
+use tokio_tungstenite::tungstenite::Message;
+use util::consts::{RECEIVE_RX, RECEIVE_TX};
 
 use crate::encryption::rsa::generate;
 use crate::msg::receive::index::receive_msgs;
 use crate::msg::send::index::send_msgs;
-use crate::util::consts::{BASE_URL, KEYPAIR, TX_CHANNEL, USE_TLS, CONCURRENT_THREADS};
+use crate::util::consts::{BASE_URL, CONCURRENT_THREADS, KEYPAIR, TX_CHANNEL, USE_TLS};
+use crate::util::msg::send_msg;
 use crate::util::types::Args;
 use crate::web::prefix::get_ws_protocol;
 
 mod encryption;
+mod file;
 mod input;
 mod msg;
 mod util;
 mod web;
-mod file;
 
 #[tokio::main]
 async fn main() {
@@ -28,32 +33,44 @@ async fn main() {
     let res = task::spawn(async move {
         let e = _async_main().await;
         if e.is_err() {
-            eprintln!("Main Run Error:");
+            eprintln!("{}", format!("Main Run Error:").on_red());
             eprintln!("{:#?}", e.unwrap_err());
             exit(-1)
         }
     })
     .await;
     if res.is_err() {
-        eprintln!("Main Run Error:");
+        eprintln!("{}", format!("Main Run Error:").on_red());
         eprintln!("{:#?}", res.unwrap_err());
         exit(-1)
     }
 }
 
 async fn _async_main() -> anyhow::Result<()> {
-
     initialize_consts().await;
 
     let args = Args::parse();
+    let mut base_url = args.address;
+    let mut secure = false;
 
-    let base_url = args.address.unwrap_or("localhost:3030".to_string());
+    if base_url.starts_with("wss://") || base_url.starts_with("https://") {
+        base_url = base_url.replace("wss://", "");
+        base_url = base_url.replace("https://", "");
+
+        secure = true;
+    }
+
+    base_url = base_url.replace("http://", "");
+    base_url = base_url.replace("ws://", "");
+
+    if secure {
+        println!("{}", format!("Using secure connection...").blue());
+    }
 
     let mut state = USE_TLS.write().await;
-    *state = args.secure.unwrap_or(false);
+    *state = secure;
 
     drop(state);
-
 
     let mut state = BASE_URL.write().await;
     *state = base_url.clone();
@@ -65,7 +82,7 @@ async fn _async_main() -> anyhow::Result<()> {
 
     drop(state);
 
-    println!("Generating keypair...");
+    println!("{}", format!("Generating RSA keypair...").green());
     let keypair = generate();
 
     let mut state = KEYPAIR.write().await;
@@ -76,7 +93,10 @@ async fn _async_main() -> anyhow::Result<()> {
     let ws_protocol = get_ws_protocol().await;
     let ws_url = format!("{}//{}/chat", ws_protocol, base_url);
 
-    println!("Connecting to {} ...", ws_url.to_string());
+    println!(
+        "{}",
+        format!("Connecting to {} ...", ws_url.to_string()).yellow()
+    );
 
     let (ws_stream, _) = connect_async(ws_url.to_string()).await?;
 
@@ -86,6 +106,11 @@ async fn _async_main() -> anyhow::Result<()> {
 
     drop(state);
 
+    if args.name.is_some() {
+        let initial_name = args.name.unwrap();
+        println!("{}", format!("Setting initial name...").bright_yellow());
+        send_msg(Message::binary(NameMsg { name: initial_name }.serialize())).await?;
+    }
 
     let receive = tokio::spawn(async move {
         let res = receive_msgs(rx).await;
@@ -110,7 +135,7 @@ async fn _async_main() -> anyhow::Result<()> {
     });
 
     task::yield_now().await;
-    while !receive.is_finished()&& !send_f.is_finished() {}
+    while !receive.is_finished() && !send_f.is_finished() {}
 
     if receive.is_finished() {
         let res = receive.await;
@@ -152,9 +177,7 @@ async fn _async_main() -> anyhow::Result<()> {
     Ok(())
 }
 
-
 pub async fn initialize_consts() {
-    println!("Initializing Channels...");
     let (tx, rx) = async_channel::unbounded::<String>();
 
     let mut state = RECEIVE_TX.write().await;
