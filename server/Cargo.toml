@@ -1,5 +1,5 @@
 [package]
-name = "rsa-messenger-server"
+name = "rsa-msg-server"
 version = "0.1.0"
 edition = "2021"
 homepage = "https://sshcrack.me"
