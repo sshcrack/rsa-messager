@@ -1,5 +1,5 @@
 use lazy_static::lazy_static;
-use openssl::{hash::MessageDigest, symm::Cipher};
+use openssl::{hash::MessageDigest, symm::Cipher, rsa::Padding};
 
 pub const UUID_SIZE: usize = 16;
 pub const U64_SIZE: usize = 8;
@@ -12,6 +12,7 @@ pub const AES_KEYSIZE_BYTES: usize = AES_KEYSIZE_BITS / 8;
 
 pub const RSA_KEY_BITS: u32 = 2048;
 pub const RSA_PUBKEY_BYTES: usize = 451;
+pub const RSA_PADDING: Padding = Padding::PKCS1_OAEP;
 
 pub const AES_IVSIZE_BITS: usize = 128;
 pub const AES_IVSIZE_BYTES: usize = AES_IVSIZE_BITS / 8;

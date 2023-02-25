@@ -1,8 +1,9 @@
 use anyhow::anyhow;
 use openssl::{rsa::Rsa, pkey::Private};
+use packets::other::key_iv::KeyIVPair;
 use uuid::Uuid;
 
-use super::consts::{RECEIVER, CURR_ID, KEYPAIR, BASE_URL, USE_TLS, CONCURRENT_THREADS};
+use super::consts::{RECEIVER, CURR_ID, KEYPAIR, BASE_URL, USE_TLS, CONCURRENT_THREADS, CHAT_SYMM_KEYS};
 
 
 pub async fn get_curr_keypair() -> anyhow::Result<Rsa<Private>> {
@@ -65,4 +66,30 @@ pub async fn get_concurrent_threads() -> u64 {
 
     drop(state);
     return threads;
+}
+
+pub async fn get_symm_key(user: &Uuid) -> anyhow::Result<KeyIVPair> {
+    let state = CHAT_SYMM_KEYS.read().await;
+    let key = state.get(&user).unwrap_or(&(None as Option<KeyIVPair>)).to_owned();
+
+    drop(state);
+    if key.is_none() {
+        return Err(anyhow!("Could not get symm key"));
+    } else {
+        return Ok(key.unwrap());
+    }
+}
+
+pub async fn get_symm_key_or_default(user: &Uuid) -> anyhow::Result<KeyIVPair> {
+    let mut state = CHAT_SYMM_KEYS.write().await;
+    let key = state.get(&user).unwrap_or(&(None as Option<KeyIVPair>)).to_owned();
+
+    if key.is_none() {
+        let key = KeyIVPair::generate()?;
+        state.insert(user.clone(), Some(key.clone()));
+
+        return Ok(key);
+    } else {
+        return Ok(key.unwrap());
+    }
 }

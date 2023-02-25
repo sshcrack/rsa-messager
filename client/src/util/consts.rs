@@ -27,4 +27,6 @@ lazy_static! {
     pub static ref PENDING_FILES: PendingFiles = PendingFiles::default();
     pub static ref FILE_UPLOADS: FileUploads = FileUploads::default();
     pub static ref FILE_DOWNLOADS: FileDownloads = FileDownloads::default();
+    
+    pub static ref CHAT_SYMM_KEYS: ChatSymmKeys = ChatSymmKeys::default();
 }

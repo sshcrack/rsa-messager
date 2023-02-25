@@ -8,12 +8,10 @@ use packets::communication::to::ToMsg;
 use packets::initialize::pubkey::PubkeyMsg;
 use packets::types::ByteMessage;
 use packets::util::modes::Modes;
-use packets::util::rsa::encrypt_rsa;
 use tokio_tungstenite::tungstenite::Message;
 
-use crate::encryption::rsa::get_pubkey_from_rec;
 use crate::msg::send::actions::index::on_command;
-use crate::util::arcs::get_curr_keypair;
+use crate::util::arcs::{get_curr_keypair, get_symm_key_or_default};
 use crate::util::consts::{RECEIVER, RECEIVE_INPUT, RECEIVE_TX, SEND_DISABLED};
 use crate::util::msg::{print_from_msg, send_msg};
 pub async fn send_msgs() -> anyhow::Result<()> {
@@ -91,8 +89,8 @@ pub async fn main_loop(stdin: &Stdin, tx: &Sender<String>) -> anyhow::Result<()>
     }
     let rec_got = rec_got.clone().unwrap();
 
-    let key = get_pubkey_from_rec(&rec_got).await?;
-    let encrypted = encrypt_rsa(&key, &line.as_bytes().to_vec())?;
+    let key = get_symm_key_or_default(&rec_got).await?;
+    let encrypted = key.encrypt(line.as_bytes())?;
 
     print_from_msg("you", &line);
 

@@ -1,9 +1,11 @@
 use std::str::FromStr;
 
-use crate::{util::consts::{BASE_URL, CURR_ID}, web::prefix::get_web_protocol};
+use crate::{util::{consts::{BASE_URL, CURR_ID, CHAT_SYMM_KEYS}, msg::send_msg}, web::prefix::get_web_protocol};
 use anyhow::anyhow;
 use colored::Colorize;
 use inquire::Select;
+use packets::{communication::key_request::WantSymmKeyMsg, types::ByteMessage};
+use tokio_tungstenite::tungstenite::Message;
 use uuid::Uuid;
 
 const NOT_FOUND_ID: usize = 9999;
@@ -70,5 +72,13 @@ pub async fn select_receiver() -> anyhow::Result<Uuid> {
         return Ok(selected);
     });
 
-    return res.await?;
+    let rec = res.await??;
+    send_msg(Message::Binary(
+        WantSymmKeyMsg {
+            user: rec
+        }.serialize()
+    )).await?;
+
+    CHAT_SYMM_KEYS.write().await.insert(rec.clone(), None);
+    return Ok(rec);
 }

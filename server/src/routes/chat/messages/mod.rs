@@ -5,3 +5,5 @@ pub mod uid;
 pub mod index;
 pub mod question;
 pub mod file;
+pub mod want_symm;
+pub mod symm_key;

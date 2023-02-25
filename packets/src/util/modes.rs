@@ -7,6 +7,8 @@ pub enum Modes {
     WantUid,
     UidReply,
     Error,
+    SymmKey,
+    WantSymmKey,
     // Initial Request from client to other client for asking them wether they want to receive the file or not
     SendFileQuestion,
     // Self-explanatory
@@ -35,7 +37,9 @@ impl Modes {
             Self::SendFileChunkReady => 9,
             Self::SendFileChunkDownloaded => 10,
             Self::SendFileStartProcessing => 11,
-            Self::SendFileAbort => 12
+            Self::SendFileAbort => 12,
+            Self::SymmKey => 13,
+            Self::WantSymmKey => 14
         }
     }
 
@@ -44,7 +48,7 @@ impl Modes {
         return ind.eq(b);
     }
 
-    pub fn get_send(self, end: &Vec<u8>) -> Vec<u8> {
+    pub fn get_send(self, end: &[u8]) -> Vec<u8> {
         let ind = self.get_indicator();
 
         let mut el = end.to_vec().clone();

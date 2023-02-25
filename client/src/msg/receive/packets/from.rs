@@ -1,12 +1,24 @@
-use packets::{communication::from::FromMsg, types::ByteMessage, util::rsa::decrypt_rsa};
+use colored::Colorize;
+use packets::{communication::{from::FromMsg, key_request::WantSymmKeyMsg}, types::ByteMessage};
+use tokio_tungstenite::tungstenite::Message;
 
-use crate::{util::{arcs::get_curr_keypair, msg::print_from_msg}, web::user_info::get_user_info};
+use crate::{util::{arcs::get_symm_key, msg::{print_from_msg, send_msg}}, web::user_info::get_user_info};
 
 pub async fn on_from(data: &mut Vec<u8>) -> anyhow::Result<()> {
     let FromMsg { msg, sender } =  FromMsg::deserialize(data)?;
-    let keypair = get_curr_keypair().await?;
 
-    let decrypted = decrypt_rsa(&keypair, &msg)?;
+    let key = get_symm_key(&sender).await;
+    if key.is_err() {
+        println!("{}", format!("Could not get symmetric key pair for user '{}'. Sending packet again...", sender.to_string().yellow()).red());
+        let packet = WantSymmKeyMsg { user: sender}.serialize();
+        send_msg(Message::binary(packet)).await?;
+
+        return Ok(());
+    }
+
+    let key = key.unwrap();
+
+    let decrypted = key.decrypt(&msg)?;
     let msg = String::from_utf8(decrypted);
 
     if msg.is_err() {

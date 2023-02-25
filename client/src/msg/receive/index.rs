@@ -16,6 +16,8 @@ use super::packets::file::chunk::ready::on_chunk_ready;
 use super::packets::file::question::index::on_file_question;
 use super::packets::file::question::reply::on_file_question_reply;
 use super::packets::file::start_processing::on_start_processing;
+use super::packets::symm_key::on_symm_key;
+use super::packets::want_symm_key::on_want_symm_key;
 use super::packets::{from::on_from, uid::on_uid};
 
 pub async fn receive_msgs(mut rx: RXChannel) -> anyhow::Result<()> {
@@ -99,6 +101,16 @@ pub async fn handle(msg: Message) -> anyhow::Result<()> {
     if Modes::SendFileAbort.is_indicator(&mode) {
         on_chunk_abort(&mut data).await?;
         return Ok(())
+    }
+
+    if Modes::SymmKey.is_indicator(&mode) {
+        on_symm_key(&mut data).await?;
+        return Ok(());
+    }
+
+    if Modes::WantSymmKey.is_indicator(&mode) {
+        on_want_symm_key(&mut data).await?;
+        return Ok(());
     }
 
     return Err(anyhow!("Invalid packet received."));

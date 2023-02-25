@@ -68,13 +68,13 @@ impl KeyIVPair {
         });
     }
 
-    pub fn encrypt(&self, data: &Vec<u8>) -> anyhow::Result<Vec<u8>> {
+    pub fn encrypt(&self, data: &[u8]) -> anyhow::Result<Vec<u8>> {
         let encrypted = encrypt(*AES_DIGEST, &self.key, Some(&self.iv), data)?;
 
         return Ok(encrypted);
     }
 
-    pub fn decrypt(&self, data: &Vec<u8>) -> anyhow::Result<Vec<u8>> {
+    pub fn decrypt(&self, data: &[u8]) -> anyhow::Result<Vec<u8>> {
         let decrypted =decrypt(*AES_DIGEST, &self.key, Some(&self.iv), data)?;
 
         return Ok(decrypted);

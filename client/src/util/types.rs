@@ -4,7 +4,7 @@ use async_channel::{Receiver, Sender};
 use clap::{arg, command, Parser};
 use futures_util::{stream::{SplitSink, SplitStream}, lock::Mutex};
 use openssl::{pkey::Private, rsa::Rsa};
-use packets::file::types::FileInfo;
+use packets::{file::types::FileInfo, other::key_iv::KeyIVPair};
 use tokio::{net::TcpStream, sync::RwLock};
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, tungstenite::Message};
 use uuid::Uuid;
@@ -32,6 +32,7 @@ pub type ReceiveTX = Sender<String>;
 pub type FileUploads = Arc<RwLock<HashMap<Uuid, Uploader>>>;
 pub type FileDownloads = Arc<RwLock<HashMap<Uuid, Downloader>>>;
 pub type PendingFiles = Arc<RwLock<HashMap<Uuid, FileInfo>>>;
+pub type ChatSymmKeys = Arc<RwLock<HashMap<Uuid, Option<KeyIVPair>>>>;
 
 /// An client designed to communicate via rsa to other clients
 #[derive(Parser, Debug)]
