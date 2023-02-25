@@ -145,7 +145,7 @@ dependencies = [
 
 [[package]]
 name = "rsa-msg-packets"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "lazy_static",

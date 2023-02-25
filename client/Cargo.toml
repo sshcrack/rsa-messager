@@ -1,6 +1,6 @@
 [package]
 name = "rsa-msg"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2021"
 homepage = "https://sshcrack.me"
 repository = "https://github.com/sshcrack/rsa-messenger"
@@ -27,8 +27,8 @@ uuid = { version = "1.2.2", features = ["v4", "fast-rng", "macro-diagnostics"] }
 clap = { version = "4.1.1", features = ["derive"] }
 lazy_static = "1.4.0"
 async-channel = "1.8.0"
-packets = { path = "../packets", package = "rsa-msg-packets" }
-#packets = { package = "rsa-msg-packets", version = "0.1.6" }
+#packets = { path = "../packets", package = "rsa-msg-packets" }
+packets = { package = "rsa-msg-packets", version = "0.1.7" }
 log = "0.4.17"
 pretty_env_logger = "0.4.0"
 crossbeam-channel = "0.5.6"
